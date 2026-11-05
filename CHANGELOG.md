@@ -6,6 +6,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- `/quiz version` shows the installed version and whether a newer one is on `main`.
+- `/quiz update` refreshes the marketplace and updates the mod in place (CLI only), then asks you to run `/reload-plugins`. It does nothing when you are already current, and prints the shell commands when it cannot run them.
+
 ### Changed
 
 - CI: `actions/checkout` updated to v7.0.1 (Node 24) and pinned to its commit SHA. Git credentials are no longer kept on the runner, jobs have timeouts, and the Claude Code installer is downloaded over HTTPS only before it runs.

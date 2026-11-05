@@ -135,6 +135,8 @@ Claude makes no edits during the quiz. If one of your answers shows a real bug, 
 | `/quiz status` (or `/quiz`) | Show whether quizzes are on |
 | `/quiz stats` | Show your record: quizzes, average, best score and streak |
 | `/quiz sound on` / `/quiz sound off` | Turn the scorecard sounds on (the default) or off |
+| `/quiz version` | Show the installed version, and whether a newer one is out |
+| `/quiz update` | Update the mod to the latest version, then tell you to run `/reload-plugins` |
 
 ## How it works
 
@@ -155,6 +157,9 @@ The mod is a single hooks module, [`hooks/register.tsx`](hooks/register.tsx):
 
 Claude Code installs a fixed copy of the mod. That copy changes only when a **new version** is released, so new commits on `main` alone do not reach you.
 
+**Update from Claude Code:** run `/quiz update`, then `/reload-plugins`. It runs the two commands below for you
+(CLI only). `/quiz version` tells you first whether there is anything new.
+
 **Update by hand:**
 
 ```
@@ -167,7 +172,7 @@ Then run `/reload-plugins` or restart Claude Code.
 **Update automatically:** auto-update is off by default for third-party marketplaces. To turn it on, run `/plugin`, open
 **Marketplaces**, select `comprehension-check` and enable auto-update. Claude Code then checks for new versions at startup.
 
-`claude plugin list` shows the version you have installed. The [Releases](https://github.com/agharsallah/comprehension-check/releases) page
+`/quiz version` or `claude plugin list` shows the version you have installed. The [Releases](https://github.com/agharsallah/comprehension-check/releases) page
 and [CHANGELOG.md](CHANGELOG.md) list what changed in each version.
 
 ## Versioning
@@ -233,7 +238,7 @@ Users with auto-update get the new version the next time they start Claude Code.
 | Plain text feedback instead of a scorecard | The mod was reloaded mid-session and the tool was not registered yet. Feedback still arrives, as text. |
 | Sounds are too much | Run `/quiz sound off`. |
 | No quiz after a change made through Bash | Expected. Edits made with shell commands such as `sed -i` are not tracked (see [Limitations](#limitations)). |
-| An update does not show up | Run `claude plugin marketplace update comprehension-check`, then `claude plugin update comprehension-check@comprehension-check`, then restart Claude Code. |
+| An update does not show up | Run `/quiz update` and then `/reload-plugins`. From a shell: `claude plugin marketplace update comprehension-check`, then `claude plugin update comprehension-check@comprehension-check`, then restart Claude Code. |
 | You want to inspect the hooks | Start with `claude --debug`. Errors from the mod's hooks are logged with the prefix `comprehension-check:`. |
 
 ## Limitations

@@ -224,6 +224,100 @@ test('/quiz sound off is kept', async ($, on) => {
   expect(r.text).toContain('off')
 })
 
+// The installed manifest, the latest one on GitHub, and the `claude` CLI.
+const updateWorld = (
+  on: On,
+  opts: { installed?: string; latest?: string | 'offline'; exitCode?: number; noProcess?: boolean } = {},
+) => {
+  const ran: string[] = []
+  const manifest = (v: string) => JSON.stringify({ name: 'comprehension-check', version: v })
+  on('fs.read', (_, e) =>
+    e.path.endsWith('.claude-plugin/plugin.json') ? { value: manifest(opts.installed ?? '0.2.0') } : { deny: 'missing' },
+  )
+  on('http.fetch', () =>
+    opts.latest === 'offline'
+      ? { deny: 'offline' }
+      : { value: { status: 200, ok: true, headers: {}, text: manifest(opts.latest ?? '0.3.0') } },
+  )
+  on('process.run', (_, e) => {
+    if (opts.noProcess === true) return { deny: 'CLI only' }
+    ran.push(e.argv.join(' '))
+    const code = opts.exitCode ?? 0
+    return { value: { exitCode: code, stdout: '', stderr: code === 0 ? '' : 'boom: not installed\n' } }
+  })
+  return { ran }
+}
+
+test('/quiz version shows the installed version and a newer one', async ($, on) => {
+  engine(on)
+  updateWorld(on, { installed: '0.2.0', latest: '0.3.0' })
+  await $.session.start(START)
+
+  const r = await $.command.run({ command: 'quiz', args: 'version', ...RUN })
+  expect(r.text).toContain('v0.2.0')
+  expect(r.text).toContain('v0.3.0 is available')
+})
+
+test('/quiz version says when it is current, or when it cannot check', async ($, on) => {
+  engine(on)
+  updateWorld(on, { installed: '0.3.0', latest: '0.3.0' })
+  await $.session.start(START)
+  expect((await $.command.run({ command: 'quiz', args: 'version', ...RUN })).text).toContain('latest version')
+})
+
+test('/quiz version offline still shows the installed version', async ($, on) => {
+  engine(on)
+  updateWorld(on, { latest: 'offline' })
+  await $.session.start(START)
+  const r = await $.command.run({ command: 'quiz', args: 'version', ...RUN })
+  expect(r.text).toContain('v0.2.0')
+  expect(r.text).toContain('Could not check')
+})
+
+test('/quiz update refreshes the marketplace, then updates the mod', async ($, on) => {
+  engine(on)
+  const { ran } = updateWorld(on, { installed: '0.2.0', latest: '0.3.0' })
+  await $.session.start(START)
+
+  const r = await $.command.run({ command: 'quiz', args: 'update', ...RUN })
+  expect(ran).toEqual([
+    'claude plugin marketplace update comprehension-check',
+    'claude plugin update comprehension-check@comprehension-check',
+  ])
+  expect(r.text).toContain('from v0.2.0 to v0.3.0')
+  expect(r.text).toContain('/reload-plugins')
+})
+
+test('/quiz update does nothing when already current', async ($, on) => {
+  engine(on)
+  const { ran } = updateWorld(on, { installed: '0.3.0', latest: '0.3.0' })
+  await $.session.start(START)
+
+  const r = await $.command.run({ command: 'quiz', args: 'update', ...RUN })
+  expect(ran.length).toBe(0)
+  expect(r.text).toContain('already the latest')
+})
+
+test('/quiz update reports a failed step and stops', async ($, on) => {
+  engine(on)
+  const { ran } = updateWorld(on, { exitCode: 1 })
+  await $.session.start(START)
+
+  const r = await $.command.run({ command: 'quiz', args: 'update', ...RUN })
+  expect(ran.length).toBe(1)
+  expect(r.text).toContain('boom: not installed')
+  expect(r.text).toContain('claude plugin update comprehension-check@comprehension-check')
+})
+
+test('/quiz update without a host shell gives the manual commands', async ($, on) => {
+  engine(on)
+  updateWorld(on, { noProcess: true })
+  await $.session.start(START)
+
+  const r = await $.command.run({ command: 'quiz', args: 'update', ...RUN })
+  expect(r.text).toContain('Update from a shell')
+})
+
 // Core's own drawing: the dialog must hold it exactly once.
 const drawEngine = (on: On) =>
   on('ui.render', ($, e) => {

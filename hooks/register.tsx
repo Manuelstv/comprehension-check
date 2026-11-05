@@ -16,6 +16,17 @@ const RESULTS_TOOL = `mcp__${PLUGIN}__${RESULTS_NAME}`
 const RESULTS_MATCH = /^mcp__comprehension-check__quiz_results$/
 const COMMAND = 'quiz'
 
+// Where updates come from: the marketplace in this repo, which serves main.
+const REPO = 'agharsallah/comprehension-check'
+const LATEST_URL = `https://raw.githubusercontent.com/${REPO}/main/.claude-plugin/plugin.json`
+const PLUGIN_ID = `${PLUGIN}@${PLUGIN}`
+const UPDATE_STEPS = [
+  ['claude', 'plugin', 'marketplace', 'update', PLUGIN],
+  ['claude', 'plugin', 'update', PLUGIN_ID],
+] as const
+const UPDATE_TIMEOUT_MS = 120_000
+const SEMVER = /^(\d+)\.(\d+)\.(\d+)(?:-[0-9A-Za-z.-]+)?$/
+
 const GATE_HEADER = 'Quiz time'
 const YES = 'Yes, quiz me'
 const NO = 'Not now'
@@ -262,12 +273,93 @@ const statsText = (s: { quizzes: number; average: number; streak: number; best: 
     ? 'No quizzes graded yet.'
     : `${s.quizzes} quiz${s.quizzes === 1 ? '' : 'zes'} · average ${s.average}% · best ${s.best}% · streak ${s.streak} (80%+ in a row)`
 
+const versionIn = (json: string): string | undefined => {
+  try {
+    const v = asRecord(JSON.parse(json))?.version
+    return typeof v === 'string' && SEMVER.test(v) ? v : undefined
+  } catch {
+    return undefined
+  }
+}
+
+// True when `a` is a later version than `b`. A pre-release sorts below its release.
+const isNewer = (a: string, b: string) => {
+  const pa = SEMVER.exec(a)
+  const pb = SEMVER.exec(b)
+  if (pa === null || pb === null) return false
+  for (let i = 1; i <= 3; i += 1) {
+    const d = Number(pa[i]) - Number(pb[i])
+    if (d !== 0) return d > 0
+  }
+  return !a.includes('-') && b.includes('-')
+}
+
+const installedVersion = async ($: EngineInterface) => {
+  try {
+    const text = await $.fs.read(`${$.plugin.root}/.claude-plugin/plugin.json`)
+    return typeof text === 'string' ? versionIn(text) : undefined
+  } catch {
+    return undefined
+  }
+}
+
+const latestVersion = async ($: EngineInterface) => {
+  try {
+    const res = await $.http.fetch(LATEST_URL)
+    return res.ok ? versionIn(res.text) : undefined
+  } catch {
+    return undefined
+  }
+}
+
+const MANUAL = `Update from a shell instead:\n${UPDATE_STEPS.map(argv => `  ${argv.join(' ')}`).join('\n')}`
+
+const lastLine = (text: string) =>
+  text
+    .split('\n')
+    .map(l => l.trim())
+    .filter(l => l !== '')
+    .pop()
+
+const versionReport = async ($: EngineInterface) => {
+  const [installed, latest] = await Promise.all([installedVersion($), latestVersion($)])
+  const have = `${PLUGIN} ${installed === undefined ? '(version unknown)' : `v${installed}`}`
+  if (latest === undefined) return `${have}. Could not check for a newer version.`
+  if (installed === undefined || isNewer(latest, installed)) {
+    return `${have}. v${latest} is available: run /${COMMAND} update.`
+  }
+  return `${have}, the latest version.`
+}
+
+const runUpdate = async ($: EngineInterface) => {
+  const [installed, latest] = await Promise.all([installedVersion($), latestVersion($)])
+  if (installed !== undefined && latest !== undefined && !isNewer(latest, installed)) {
+    return `${PLUGIN} v${installed} is already the latest version.`
+  }
+  for (const argv of UPDATE_STEPS) {
+    const shown = argv.join(' ')
+    let ran
+    try {
+      ran = await $.process.run(argv, { timeoutMs: UPDATE_TIMEOUT_MS })
+    } catch {
+      return `Could not run \`${shown}\` here. ${MANUAL}`
+    }
+    if (ran.exitCode !== 0) {
+      const why = lastLine(ran.stderr) ?? lastLine(ran.stdout)
+      return `\`${shown}\` failed${why === undefined ? '' : `: ${why}`}. ${MANUAL}`
+    }
+  }
+  const from = installed === undefined ? '' : ` from v${installed}`
+  const to = latest === undefined ? '' : ` to v${latest}`
+  return `Updated ${PLUGIN}${from}${to}. Run /reload-plugins or restart Claude Code to load it.`
+}
+
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: COMMAND,
-      description: 'Comprehension quiz after code changes: on | off | status | stats | sound on|off',
-      argumentHint: 'on|off|status|stats|sound on|off',
+      description: 'Comprehension quiz after code changes: on | off | status | stats | sound on|off | version | update',
+      argumentHint: 'on|off|status|stats|sound on|off|version|update',
     })
     await $.tool.register({
       name: RESULTS_NAME,
@@ -298,9 +390,14 @@ export const register: Register = on => {
       const average = s.quizzes === 0 ? 0 : Math.round(s.totalPct / s.quizzes)
       return { text: `📈 ${statsText({ ...s, average })}` }
     }
+    if (arg === 'version') return { text: await versionReport($) }
+    if (arg === 'update') {
+      $.ui.toast(`Updating ${PLUGIN}…`)
+      return { text: await runUpdate($) }
+    }
     const isOn = await isEnabled($)
     return {
-      text: `Comprehension quiz is ${isOn ? 'on' : 'off'}. Use /${COMMAND} on|off, /${COMMAND} stats, /${COMMAND} sound on|off.`,
+      text: `Comprehension quiz is ${isOn ? 'on' : 'off'}. Use /${COMMAND} on|off, /${COMMAND} stats, /${COMMAND} sound on|off, /${COMMAND} version, /${COMMAND} update.`,
     }
   })
 
