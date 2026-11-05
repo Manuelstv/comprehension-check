@@ -25,6 +25,7 @@ export const STORE_KEYS = {
   sound: 'sound',
   maxQuestions: 'maxQuestions',
   sizing: 'sizing',
+  perspective: 'perspective',
   stats: 'stats',
 } as const
 
@@ -40,10 +41,18 @@ export type Sizing = 'agent' | 'size'
 
 export const LINES_PER_QUESTION = 100
 
+// ─── Quiz perspective ────────────────────────────────────────────────────────
+
+// The angle the questions take. `mixed` draws on the other three, picking the
+// angles the change actually carries. What each one asks is in quiz/prompts.ts.
+export const PERSPECTIVES = ['mixed', 'code', 'architecture', 'product'] as const
+export type Perspective = (typeof PERSPECTIVES)[number]
+
 export const DEFAULT_SETTINGS = {
   sound: true,
   maxQuestions: QUESTION_LIMITS.perDialog as number,
   sizing: 'agent' as Sizing,
+  perspective: 'mixed' as Perspective,
 } as const
 
 // ─── Files that never count as a change ──────────────────────────────────────
@@ -87,10 +96,10 @@ export const GATE = {
   yesWords: /^\s*(y|yes|sure|ok|okay|go)\b/i,
 } as const
 
-// The settings menu opened by `/quiz settings`.
+// The settings menu opened by `/quiz settings`. It lists one row per setting
+// and nothing else, since a dialog holds at most 4 options: Esc closes it.
 export const SETTINGS_MENU = {
   header: 'Settings',
-  done: 'Done',
   // Marks the current value among the max-questions options.
   currentMark: ' (current)',
   // The max questions offered; any number from 1 to 99 can be typed.

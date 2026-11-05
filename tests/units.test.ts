@@ -14,6 +14,7 @@ import {
   questionCountFor,
   questionsForSize,
 } from '../hooks/quiz/questionCount'
+import { LENSES, QUIZ_GOAL, quizInstructions } from '../hooks/quiz/prompts'
 import { QuizRounds } from '../hooks/quiz/quizRounds'
 import { TurnReminders } from '../hooks/quiz/turnReminders'
 import { parseResults, scoreOf, tierFor } from '../hooks/scorecard/grading'
@@ -149,6 +150,51 @@ test('settings usage lists every setting with its values', async () => {
   expect(SETTINGS_USAGE).toContain('/quiz settings sound on|off')
   expect(SETTINGS_USAGE).toContain('/quiz settings max 1-99')
   expect(SETTINGS_USAGE).toContain('/quiz settings length claude|size')
+  expect(SETTINGS_USAGE).toContain('/quiz settings perspective mixed|code|architect|product')
+})
+
+test('perspective: parsed from its aliases, stepped round, read back from the store', async () => {
+  const perspective = SETTING_DEFINITIONS.find(def => def.key === 'perspective')!
+  expect(perspective.defaultValue).toBe('mixed')
+  expect(perspective.parse('architect')).toBe('architecture')
+  expect(perspective.parse('pm')).toBe('product')
+  expect(perspective.parse('dev')).toBe('code')
+  expect(perspective.parse('ux')).toBeUndefined()
+  expect(perspective.step('product', 1)).toBe('mixed')
+  expect(perspective.step('mixed', -1)).toBe('product')
+  expect(perspective.fromStore('code')).toBe('code')
+  expect(perspective.fromStore('qa')).toBeUndefined()
+})
+
+// The prompt's structure: each rule the evals grade a quiz against must
+// actually be in the text Claude gets. evals/ checks what Claude does with it.
+test('quiz instructions: goal first, the chosen lens only, and the critical-thinking rules', async () => {
+  const agent = { mode: 'agent' as const, max: 4 }
+  const mixed = quizInstructions(agent, 'mixed')
+  expect(mixed).toContain(QUIZ_GOAL)
+  for (const lens of Object.values(LENSES)) expect(mixed).toContain(`${lens.name} (${lens.focus})`)
+  expect(mixed).toContain('use at least two lenses')
+
+  for (const [key, lens] of Object.entries(LENSES)) {
+    const text = quizInstructions(agent, key as keyof typeof LENSES)
+    expect(text).toContain(`Perspective: ${lens.name}.`)
+    for (const angle of lens.angles) expect(text).toContain(angle)
+    for (const other of Object.values(LENSES).filter(l => l !== lens)) expect(text).not.toContain(other.angles[0]!)
+  }
+
+  for (const rule of [
+    'If someone could answer it without having seen the change, rewrite it',
+    'a decision Claude made that the user did not ask for',
+    'what they prove and what they would miss',
+    'Do NOT mark the correct answer',
+    'Grade the reasoning, not the wording',
+    'never just "review the code"',
+    'Do not edit any files during the quiz',
+  ]) {
+    expect(mixed).toContain(rule)
+  }
+  expect(mixed).toContain('{"source": "comprehension-check"}')
+  expect(quizInstructions({ mode: 'agent', max: 10 }, 'code')).toContain('rounds of 4')
 })
 
 test('settings: ←/→ steps each value, the max within 1-99', async () => {

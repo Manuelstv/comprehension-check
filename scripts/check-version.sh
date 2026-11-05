@@ -11,7 +11,7 @@ BASE="${1:-origin/main}"
 MANIFEST=.claude-plugin/plugin.json
 
 # Paths that do not change what an installed copy does.
-NOT_SHIPPED='^(README\.md|CHANGELOG\.md|LICENSE|tsconfig\.json|tests/|scripts/|\.github/|\.gitignore$)'
+NOT_SHIPPED='^(README\.md|CHANGELOG\.md|LICENSE|tsconfig\.json|tests/|evals/|scripts/|\.github/|\.gitignore$)'
 
 version_at() { git show "$1:$MANIFEST" | jq -r '.version // empty'; }
 

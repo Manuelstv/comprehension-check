@@ -2,10 +2,10 @@
 // words that describe it. The command line, the settings menu and the summary
 // all read this table; adding a setting means adding an entry.
 
-import { DEFAULT_SETTINGS, LINES_PER_QUESTION, QUESTION_LIMITS, STORE_KEYS } from '../config'
-import type { Sizing } from '../config'
+import { DEFAULT_SETTINGS, LINES_PER_QUESTION, PERSPECTIVES, QUESTION_LIMITS, STORE_KEYS } from '../config'
+import type { Perspective, Sizing } from '../config'
 
-export type Settings = { sound: boolean; maxQuestions: number; sizing: Sizing }
+export type Settings = { sound: boolean; maxQuestions: number; sizing: Sizing; perspective: Perspective }
 
 export type SettingValue = Settings[keyof Settings]
 
@@ -21,6 +21,9 @@ export type SettingDefinition<V = SettingValue> = {
   // The setting's name in the settings menu.
   title: string
   defaultValue: V
+  // Every value, when the menu offers them as a list to pick from. Without
+  // it, Enter steps the value on.
+  choices?: readonly V[]
   // The value as the menu shows it: "On", "4", "Claude decides".
   label(value: V): string
   // One line under the row that says what the value does.
@@ -104,9 +107,57 @@ const sizing: SettingDefinition<Sizing> = {
   saved: value => `Quiz length: ${value === 'agent' ? 'Claude decides' : 'fits the change size'}. ${SIZING_HINTS[value]}`,
 }
 
+const PERSPECTIVE_TEXT: Record<Perspective, { label: string; words: readonly string[]; hint: string }> = {
+  mixed: {
+    label: 'Mixed',
+    words: ['mixed', 'mix', 'all'],
+    hint: 'Code, architecture and product angles, as the change calls for.',
+  },
+  code: {
+    label: 'Code',
+    words: ['code', 'coding', 'dev', 'developer'],
+    hint: 'How it behaves: edge cases, failure paths, what the tests miss.',
+  },
+  architecture: {
+    label: 'Architecture',
+    words: ['architecture', 'architect', 'arch', 'design'],
+    hint: 'How it fits: design trade-offs, coupling, blast radius, failure modes.',
+  },
+  product: {
+    label: 'Product',
+    words: ['product', 'pm', 'user', 'users'],
+    hint: 'What it means for users: behavior, defaults, scope, how to know it works.',
+  },
+}
+
+const perspective: SettingDefinition<Perspective> = {
+  key: 'perspective',
+  storeKey: STORE_KEYS.perspective,
+  names: ['perspective', 'lens', 'view'],
+  usage: 'mixed|code|architect|product',
+  title: 'Perspective',
+  defaultValue: DEFAULT_SETTINGS.perspective,
+  choices: PERSPECTIVES,
+  label: value => PERSPECTIVE_TEXT[value].label,
+  hint: value => PERSPECTIVE_TEXT[value].hint,
+  step: (value, direction) => {
+    const at = PERSPECTIVES.indexOf(value)
+    return PERSPECTIVES[(at + direction + PERSPECTIVES.length) % PERSPECTIVES.length] as Perspective
+  },
+  parse: word => PERSPECTIVES.find(p => PERSPECTIVE_TEXT[p].words.includes(word)),
+  fromStore: stored => PERSPECTIVES.find(p => p === stored),
+  summary: value => `${PERSPECTIVE_TEXT[value].label.toLowerCase()} perspective`,
+  saved: value => `Quiz perspective: ${PERSPECTIVE_TEXT[value].label}. ${PERSPECTIVE_TEXT[value].hint}`,
+}
+
 const asAny = <V>(def: SettingDefinition<V>) => def as unknown as SettingDefinition
 
-export const SETTING_DEFINITIONS: readonly SettingDefinition[] = [asAny(sound), asAny(maxQuestions), asAny(sizing)]
+export const SETTING_DEFINITIONS: readonly SettingDefinition[] = [
+  asAny(sound),
+  asAny(maxQuestions),
+  asAny(sizing),
+  asAny(perspective),
+]
 
 export const findSetting = (name: string) =>
   SETTING_DEFINITIONS.find(def => def.names.includes(name) || def.key === name)

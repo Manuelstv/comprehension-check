@@ -1,5 +1,5 @@
 // The settings menu: every setting in one list, Enter changes the one picked
-// in place, and the list comes back until Done or Esc.
+// in place, and the list comes back until Esc.
 
 import { expect, mock, test } from 'claude-code/testing'
 import type { On } from 'claude-code'
@@ -39,10 +39,17 @@ test('Enter on Sound or Length changes it in place, and the list comes back', as
   await $.session.start(START)
 
   const r = await $.command.run(quiz('settings'))
-  expect(r.text).toContain('Saved. Quiz settings: sound off · at most 4 questions · length fits the change size.')
+  expect(r.text).toContain(
+    'Saved. Quiz settings: sound off · at most 4 questions · length fits the change size · mixed perspective.',
+  )
 
   expect(asked.map(a => a.header)).toEqual(['Settings', 'Settings', 'Settings'])
-  expect(asked[0]?.options).toEqual(['Sound: On', 'Max questions: 4', 'Length: Claude decides', 'Done'])
+  expect(asked[0]?.options).toEqual([
+    'Sound: On',
+    'Max questions: 4',
+    'Length: Claude decides',
+    'Perspective: Mixed',
+  ])
   expect(asked[1]?.options[0]).toBe('Sound: Off')
   expect(asked[0]?.question).toContain('Claude weighs how severe and complex the change is')
   expect(asked[2]?.question).toContain('1 question per 100 changed lines')
@@ -56,6 +63,26 @@ test('Max questions: pick a number, or type one under Other', async ($, on) => {
   expect(r.text).toContain('at most 12 questions')
   expect(asked[1]?.options).toEqual(['2', '4 (current)', '6', '8'])
   expect(asked[3]?.question).toContain('Now 6')
+})
+
+test('Perspective lists every lens with what it asks, the current one marked', async ($, on) => {
+  const asked = engine(on, ['Perspective: Mixed', 'Product', 'Perspective: Product', 'Architecture', 'Done'])
+  await $.session.start(START)
+
+  const r = await $.command.run(quiz('settings'))
+  expect(r.text).toContain('architecture perspective')
+  expect(asked[1]?.header).toBe('Perspective')
+  expect(asked[1]?.options).toEqual(['Mixed (current)', 'Code', 'Architecture', 'Product'])
+  expect(asked[1]?.question).toContain('Product: What it means for users')
+  expect(asked[3]?.options).toContain('Product (current)')
+})
+
+test('Perspective: a lens typed under Other is understood; nonsense changes nothing', async ($, on) => {
+  engine(on, ['Perspective: Mixed', 'architect', 'Perspective: Architecture', 'sideways', 'Done'])
+  await $.session.start(START)
+
+  const r = await $.command.run(quiz('settings'))
+  expect(r.text).toContain('architecture perspective')
 })
 
 test('Esc at once changes nothing and shows the one-line commands', async ($, on) => {

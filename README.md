@@ -112,9 +112,22 @@ If you choose yes, Claude asks up to 4 questions in a single dialog (see [Settin
 - **Checkboxes.** More than one option is correct.
 - **Free text.** For at least one question the listed options are incomplete on purpose, so you answer in your own words through **Other**.
 
-The questions cover judgment rather than trivia: why one approach was chosen over another, what breaks if a line is removed,
-what happens with an edge-case input, trade-offs, how you would check that it works, and what risk is left.
-The correct answer is never marked or hinted at.
+The goal is your critical thinking, not your memory. Code an agent wrote is easy to accept without reading it, and a quiz checks
+that you still own the change: you can explain it, defend it to whoever will maintain it, and say what it does not cover. So the questions:
+
+- are about **this** change, naming the file or function. None can be answered from general knowledge.
+- make you reason: predict what happens with an edge-case input, say what breaks if a line goes, weigh a trade-off, or find what a green test does not prove.
+- include at least one decision Claude made **that you did not ask for**: a default, an assumption, something left out of scope. Summaries hide these.
+- never mark or hint at the right answer. Wrong options are mistakes a reasonable reader could make, and the right one is no longer or more precise than the rest.
+
+You choose the **perspective** the questions take (see [Settings](#settings)):
+
+| Perspective | Asks about |
+| --- | --- |
+| **Mixed** (default) | Whichever of the three below the change actually carries, using at least two when there are 2 or more questions |
+| **Code** | How it behaves: the result for a concrete input, failure paths, what breaks if a guard goes, what the tests miss |
+| **Architecture** | How it fits: why this design over an alternative, coupling, where state lives, blast radius, behavior under load or partial failure |
+| **Product** | What it means for users: what they see differently, who is affected, defaults and scope chosen for them, how you would know it works |
 
 After you answer, Claude grades each question and shows a **scorecard**:
 
@@ -134,10 +147,11 @@ Claude makes no edits during the quiz. If one of your answers shows a real bug, 
 | `/quiz off` | Turn quizzes off. The setting persists across sessions. |
 | `/quiz status` (or `/quiz`) | Show whether quizzes are on |
 | `/quiz stats` | Show your record: quizzes, average, best score and streak |
-| `/quiz settings` | Open the settings menu: sound, max questions and quiz length |
+| `/quiz settings` | Open the settings menu: sound, max questions, quiz length and perspective |
 | `/quiz settings sound on\|off` | Turn the scorecard sounds on (the default) or off. `/quiz sound on\|off` still works. |
 | `/quiz settings max <1-99>` | The most questions a quiz may have (default 4). `questions <n>` still works. |
 | `/quiz settings length claude\|size` | How the number of questions is chosen: Claude decides (the default), or it fits the size of the change. `count agent\|size` still works. |
+| `/quiz settings perspective mixed\|code\|architect\|product` | The angle the questions take (default mixed). `lens` and `view` work too, as do `architecture`, `dev` and `pm`. |
 | `/quiz version` | Show the installed version, and whether a newer one is out |
 | `/quiz update` | Update the mod to the latest version, then tell you to run `/reload-plugins` |
 
@@ -146,17 +160,18 @@ Claude makes no edits during the quiz. If one of your answers shows a real bug, 
 `/quiz settings` opens one list of every setting with its current value, as `/config` does:
 
 ```text
-Enter changes the setting you pick. Length now: Claude weighs how severe and complex the change is.
+Enter changes the setting you pick; Esc when done. Length now: Claude weighs how severe and complex the change is.
 ❯ 1. Sound: On
   2. Max questions: 4
   3. Length: Claude decides
-  4. Done
+  4. Perspective: Mixed
 ```
 
 - **↑ ↓** move, **Enter** changes the setting in place, and the list comes back with the new value.
 - **Sound** and **Length** switch on Enter.
 - **Max questions** asks for a number: pick 2, 4, 6 or 8, or type any number from 1 to 99 under **Other**.
-- **Done** or **Esc** closes it.
+- **Perspective** lists Mixed, Code, Architecture and Product, each with what it asks about.
+- **Esc** closes it. A dialog holds at most 4 options, so there is no Done row.
 
 Each setting can also be set in one line, as in the table above. Settings persist across sessions.
 
@@ -165,6 +180,7 @@ Each setting can also be set in one line, as in the table above. Settings persis
 | **Sound** | on, off | on |
 | **Max questions** | 1–99. No quiz has more. | 4 |
 | **Length** | **Claude decides**: Claude weighs how severe and complex the change is and picks how many. **Fits change size**: 1 question per 100 changed lines. Both stay within the max. | Claude decides |
+| **Perspective** | **Mixed**, **Code**, **Architecture**, **Product** (see [Usage](#usage)) | Mixed |
 
 With **Fits change size**, 1–100 changed lines get 1 question, 101–200 get 2, and so on, up to your max.
 A quiz of more than 4 questions comes in rounds of up to 4. If you press Esc during a later round, Claude asks no more and grades the rounds you answered.
@@ -205,8 +221,10 @@ The hooks module's entry point is [`hooks/register.tsx`](hooks/register.tsx). It
 | `hooks/update/` | `/quiz version` and `/quiz update` |
 | `hooks/commands/` | The `/quiz` command |
 | `hooks/lib/` | Small helpers with no mod logic: semver, text and safe value reads |
+| [`evals/`](evals/README.md) | Model evals of the quiz prompt, run with `claude plugin eval` |
+| `scripts/build-evals.ts` | Writes the eval prompts that embed the quiz text, so they never drift from `hooks/quiz/prompts.ts` |
 
-To add a setting, add one entry to `SETTING_DEFINITIONS` in `hooks/settings/settings.ts`. The command line, the menu and the summary all pick it up.
+To add a setting, add one entry to `SETTING_DEFINITIONS` in `hooks/settings/definitions.ts`. The command line, the menu and the summary all pick it up. A setting with `choices` gets a picker in the menu. The menu holds at most 4 settings, because a dialog holds at most 4 options.
 
 Two rules of the mod loader shape the code:
 
@@ -265,6 +283,19 @@ claude plugin test .            # tests/*.test.ts: quiz.test.ts drives the hooks
 claude --plugin-dir .           # a session with the mod loaded from this folder
 scripts/check-version.sh        # is the version bumped for what changed vs origin/main?
 ```
+
+### Evals
+
+The tests check the code. The [evals](evals/README.md) check the **prompt**: they run real models and score the quizzes Claude writes.
+Each property is graded on its own: grounded in the change, critical rather than trivia, a question about a decision Claude made,
+fair options, the chosen perspective, and fair grading.
+
+```
+bun scripts/build-evals.ts --check   # the generated eval prompts match hooks/quiz/prompts.ts
+claude plugin eval . --allow-tools Write Edit mcp__comprehension-check__quiz_results --ablation none
+```
+
+Run the evals after any change to `hooks/quiz/prompts.ts`, after running `bun scripts/build-evals.ts`. They call models, so CI does not run them.
 
 Add each change to the `[Unreleased]` section of [CHANGELOG.md](CHANGELOG.md) in the same PR.
 

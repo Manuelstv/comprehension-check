@@ -2,6 +2,7 @@
 // carry them, and the replies to a refused quiz call.
 
 import { LINES_PER_QUESTION, QUESTION_LIMITS, QUIZ_SOURCE, QUIZ_TOOL, RESULTS_TOOL } from '../config'
+import type { Perspective } from '../config'
 import { plural } from '../lib/text'
 import { mayNeedRounds, nextRoundSize } from './questionCount'
 import type { QuestionCount, SizedCount } from './questionCount'
@@ -22,51 +23,118 @@ const howManyQuestions = (count: QuestionCount): string => {
 // How to call the dialog: once, or in rounds when the quiz may not fit one.
 const howToAsk = (count: QuestionCount): string => {
   if (!mayNeedRounds(count)) {
-    return `Call ${QUIZ_TOOL} ONCE with ${howManyQuestions(count)} about the change, and pass metadata: {"source": "${QUIZ_SOURCE}"}.`
+    return `Call ${QUIZ_TOOL} ONCE with ${howManyQuestions(count)}. Pass metadata: {"source": "${QUIZ_SOURCE}"}.`
   }
   const rounds =
     count.mode === 'size'
       ? `ask them in rounds: ${QUIZ_TOOL} takes at most ${perDialog} questions per call, so call it with ${perDialog}, then the next ${perDialog}, and the rest last`
       : `${QUIZ_TOOL} takes at most ${perDialog} questions per call: up to ${perDialog}, call it ONCE; for more, ask them in rounds of ${perDialog}, the last one holding the rest`
-  return `Ask ${howManyQuestions(count)} about the change; ${rounds}. Pass metadata: {"source": "${QUIZ_SOURCE}"} on every round. The user is asked to start only before the first round; if they dismiss a later round, ask no more and grade the rounds they answered.`
+  return `Ask ${howManyQuestions(count)}; ${rounds}. Pass metadata: {"source": "${QUIZ_SOURCE}"} on every round. The user is asked to start only before the first round; if they dismiss a later round, ask no more and grade the rounds they answered.`
 }
 
-export const quizInstructions = (count: QuestionCount) => `1. ${howToAsk(count)} The mod first asks the user whether they want the quiz, then shows answering instructions above your questions. With 2 or more questions, mix the formats:
+// What the quiz is for. Every rule after it serves this.
+export const QUIZ_GOAL = `The goal is the user's critical thinking, not their memory. Code an agent wrote is easy to accept without reading it; the quiz checks that the user still owns this change: they can explain what it does, defend it to whoever will maintain it, and say what it does not cover. Ask what a sharp reviewer would ask before approving it.`
+
+// `elsewhere`: what belongs to the other lenses, kept out of this one.
+type Lens = { name: string; focus: string; elsewhere: string; angles: readonly string[] }
+
+// The angles each perspective asks from. `mixed` draws on all three.
+export const LENSES: Record<Exclude<Perspective, 'mixed'>, Lens> = {
+  code: {
+    name: 'Code',
+    focus: 'how the change behaves, line by line',
+    elsewhere: 'system design, deployment and user impact',
+    angles: [
+      'the result for a concrete input or edge case that runs through the changed code',
+      'what breaks if a specific line, guard or condition is removed, reordered or inverted',
+      'failure paths: an error, an empty or missing value, a retry, a timeout',
+      'what the tests or checks prove, and which broken case they would still let through',
+    ],
+  },
+  architecture: {
+    name: 'Architecture',
+    focus: 'how the change fits the system',
+    elsewhere: 'line-by-line results and user-facing impact',
+    angles: [
+      'why this design over a named alternative, and what it trades away',
+      'boundaries and coupling: what now depends on what, where state lives, who owns it',
+      'blast radius: what else must change in step, and what could break far from the diff',
+      'behavior under load, concurrency, ordering or partial failure, and how reversible the change is',
+      'what the tests cannot show about the running system: other instances, real load, callers they skip',
+    ],
+  },
+  product: {
+    name: 'Product',
+    focus: 'what the change means for the people who use it',
+    elsewhere: 'line-level mechanics and internal design with no user consequence',
+    angles: [
+      'what a user now sees or does differently, and which users it affects',
+      'defaults, scope cuts and requirements Claude chose or reinterpreted on the user\'s behalf',
+      'what was left out, and whether it is safe to ship without it',
+      'how they would know it works for users, beyond a green test: what to try, measure or tell them',
+    ],
+  },
+}
+
+const angleList = (lens: Lens) => lens.angles.map(angle => `\n   - ${angle}`).join('')
+
+const perspectiveRule = (perspective: Perspective): string => {
+  if (perspective === 'mixed') {
+    const lenses = Object.values(LENSES)
+      .map(lens => `\n   ${lens.name} (${lens.focus}):${angleList(lens).replaceAll('\n   -', '\n     -')}`)
+      .join('')
+    return `Perspective: mixed. Pick the angles this change actually carries; with 2 or more questions, use at least two lenses.${lenses}`
+  }
+  const lens = LENSES[perspective]
+  return `Perspective: ${lens.name}. The user chose to be quizzed on ${lens.focus}, so EVERY question takes this angle, including the riskiest-part, decision and test questions below. ${lens.elsewhere[0]?.toUpperCase()}${lens.elsewhere.slice(1)} belong to other perspectives: leave them out unless you can ask them as a ${lens.name.toLowerCase()} question. If the change barely touches this angle, ask how it could still reach it rather than switching angle. Good angles:${angleList(lens)}`
+}
+
+export const quizInstructions = (count: QuestionCount, perspective: Perspective) => `1. ${howToAsk(count)} The mod first asks the user whether they want the quiz, then shows answering instructions above your questions.
+2. ${QUIZ_GOAL}
+3. ${perspectiveRule(perspective)}
+4. Every question must:
+   - be about THIS change: name the file, function or behavior it is about. If someone could answer it without having seen the change, rewrite it,
+   - test reasoning (why, what if, what breaks, what it proves), not trivia such as names, syntax, line counts or API spellings,
+   - hold one idea and stand alone: the dialog shows only the question and its options.
+   Across the quiz, always through the chosen perspective:
+   - ask at least one question about a decision Claude made that the user did not ask for: a default, an assumption, something left out of scope, or how two requirements in tension were resolved. Summaries hide these,
+   - if the change added or ran tests or checks, ask what they prove and what they would miss: a green check proves one thing,
+   - start with the riskiest part of the change, where being wrong costs the most.
+5. With 2 or more questions, mix the formats:
    - at least one single-choice question (multiSelect: false),
    - at least one checkbox question (multiSelect: true) where more than one option is correct,
    - the user can always type a free-text answer via "Other"; for one question, make the options deliberately incomplete so explaining in their own words is the best answer.
-   Keep each header short and concrete (it is shown in the instructions): "Approach", "Edge case", "Risk".
-2. Aim at understanding and judgment, not trivia. Good angles: why this approach over an alternative; what breaks if a specific line/condition is removed; predicting behavior for an edge-case input; trade-offs (performance, readability, coupling, testability); how they would verify it works; what risk or follow-up the change leaves open.
-3. Make every distractor plausible. Do NOT mark the correct answer, add "(Recommended)", or hint at it in labels or descriptions. Keep each question self-contained (name the file/function it is about).
-4. If the ${QUIZ_TOOL} call comes back saying the user skipped the quiz, or they dismiss it, accept that and end the turn with one short line. Do not ask again.
-5. After the user answers${mayNeedRounds(count) ? ' the last round' : ''}, grade every question and call ${RESULTS_TOOL} ONCE with all of them. It draws a playful scorecard (score, percentage, effects) for the user. Per question give:
+   Keep each header short and concrete (it is shown in the instructions): "Edge case", "Trade-off", "Blast radius", "User impact".
+6. Give 2-4 options per question. Make every wrong option a mistake a reasonable reader could make (a real misconception, a plausible alternative design, a neighbouring wrong line), stated with a reason just as specific as the right one's. The right option must not stand out by length or precision, the classic give-away: keep every option's label plus description within about 15 characters of the others, and before sending, if the right one is the longest, shorten it or lengthen a wrong one. Vary its position; no "all of the above" or "none of the above". Do NOT mark the correct answer, add "(Recommended)", or hint at it in labels or descriptions.
+7. If the ${QUIZ_TOOL} call comes back saying the user skipped the quiz, or they dismiss it, accept that and end the turn with one short line. Do not ask again.
+8. After the user answers${mayNeedRounds(count) ? ' the last round' : ''}, grade every question and call ${RESULTS_TOOL} ONCE with all of them. It draws a playful scorecard (score, percentage, effects) for the user. Grade the reasoning, not the wording: a free-text answer with the core idea is correct; one with part of it, or the right pick for a stated wrong reason, is partial. A checkbox answer is correct only with every right option and no wrong one, partial with some right. Per question give:
    - question: a 2-6 word label ("Why the Stop fallback"),
    - verdict: correct | partial | incorrect,
    - user_answer: what they picked or wrote, short; correct_answer: the right answer, short,
    - punchline: ONE punchy line, 12 words max, vivid and specific to their answer. Praise a hit with energy ("Nailed it: the guard stops the double fire."); name a miss plainly ("Close, but reload wipes module vars, not the store."). No generic filler like "Great job!",
-   - explanation: 1-2 tight sentences with the why and the misconception, if any,
+   - explanation: 1-2 tight sentences with the why, tied to the code, and the misconception if any. If their answer exposes a risk you missed, say so here instead of defending the change,
    - ref: file:line where it lives, when useful.
-   Also give next_step: one sentence on what to look at next.
+   Also give next_step: one concrete action for their biggest gap (a line to read, a check to run, an input to try), never just "review the code".
    The scorecard IS the feedback: do not repeat it in your own text. After the tool returns, write at most one short line. If ${RESULTS_TOOL} is not available, give the same feedback as short text instead.
-6. Do not edit any files during the quiz. If an answer exposes a real problem in the change, say so and propose a fix, but wait for the user's go-ahead.`
+9. Do not edit any files during the quiz. If an answer exposes a real problem in the change, say so and propose a fix, but wait for the user's go-ahead.`
 
 // Left for Claude at the first edit of a turn.
-export const firstEditNote = (count: QuestionCount) =>
+export const firstEditNote = (count: QuestionCount, perspective: Perspective) =>
   `${TAG} The user has enabled comprehension quizzes. You have started changing code in this turn. Keep working on the task as normal; once ALL the code changes for this request are done, and before you end your turn, quiz the user on what you changed:
-${quizInstructions(count)}${count.mode === 'size' ? `\nIf the change grows, a later ${TAG} note raises the count; use the latest one.` : ''}`
+${quizInstructions(count, perspective)}${count.mode === 'size' ? `\nIf the change grows, a later ${TAG} note raises the count; use the latest one.` : ''}`
 
 // Left for Claude when the change has grown into a larger quiz (size mode).
 export const changeGrewNote = (count: SizedCount) =>
   `${TAG} The change has grown to about ${count.lines} changed lines: ask exactly ${questions(count.exact)} in the quiz.`
 
 // Sent back to Claude by the Stop hook when it tried to end an unquizzed turn.
-export const unquizzedStopNote = (files: readonly string[], count: QuestionCount) =>
-  `${TAG} You changed code this turn. Before ending, quiz the user on it to check their understanding and build critical thinking.
+export const unquizzedStopNote = (files: readonly string[], count: QuestionCount, perspective: Perspective) =>
+  `${TAG} You changed code this turn. Before ending, quiz the user on it to check their understanding and build their critical thinking.
 
 Files changed: ${files.map(f => `\n- ${f}`).join('')}
 
 Do this now:
-${quizInstructions(count)}`
+${quizInstructions(count, perspective)}`
 
 // The reply to a quiz round whose length breaks the settings.
 export const wrongLengthReply = (count: QuestionCount, asked: number, askedBefore = 0) => {

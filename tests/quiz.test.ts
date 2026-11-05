@@ -414,6 +414,28 @@ test('by change size: 1 question per 100 changed lines', async ($, on) => {
   expect(seen.gate.length).toBe(0)
 })
 
+test('the perspective setting picks the lens Claude is told to quiz from', async ($, on) => {
+  const { session } = engine(on)
+  await $.session.start(START)
+
+  await $.tool.call({ ...EDIT, file_path: '/repo/mixed.kt' })
+  const mixed = noteTexts(session)[0] ?? ''
+  expect(mixed).toContain('Perspective: mixed')
+  for (const lens of ['Code (', 'Architecture (', 'Product (']) expect(mixed).toContain(lens)
+  expect(mixed).toContain("critical thinking")
+
+  expect((await $.command.run(settingsCmd('perspective product'))).text).toContain('Quiz perspective: Product')
+  const r = await $.classic.Stop({ stop_hook_active: false })
+  expect(r.block).toContain('Perspective: Product')
+  expect(r.block).toContain('which users it affects')
+  expect(r.block).not.toContain('Architecture (')
+
+  for (const [word, name] of [['architect', 'Architecture'], ['coding', 'Code'], ['all', 'Mixed']] as const) {
+    expect((await $.command.run(settingsCmd(`lens ${word}`))).text).toContain(`Quiz perspective: ${name}`)
+  }
+  expect((await $.command.run(settingsCmd('view sideways'))).text).toContain('Unknown setting')
+})
+
 test('by change size, the max still caps the count, and the Stop note says so', async ($, on) => {
   engine(on)
   await $.session.start(START)

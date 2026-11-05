@@ -6,6 +6,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- **Quiz perspective.** `/quiz settings perspective mixed|code|architect|product`, also in the settings menu, sets the angle the questions take. **Code** asks how the change behaves. **Architecture** asks how it fits the system. **Product** asks what it means for users. **Mixed** (the default) draws on whichever of the three the change carries.
+- **Evals for the quiz prompt** in `evals/`, run with `claude plugin eval`. They score the quizzes Claude writes, one property per grader: grounded in the change, critical rather than trivia, a question about a decision Claude made, fair options, the chosen perspective, and fair grading. `scripts/build-evals.ts` writes the eval prompts from `hooks/quiz/prompts.ts`, so they test the prompt that ships.
+
+### Changed
+
+- **The quiz prompt is built around critical thinking.** It states the goal first: the user owns the change, can defend it, and knows what it does not cover. Every question must be about this change and make the user reason. One question must be about a decision Claude made that the user did not ask for. Tests are asked about as "what does it prove, and what would it miss". The right option may not stand out by length or precision. Grading weighs reasoning over wording, gives partial credit for a right pick with a wrong reason, and ends with one concrete next step.
+- The settings menu has no **Done** row (a dialog holds at most 4 options, and there are now 4 settings). Esc closes it, as before.
+
 ## [0.4.0] - 2026-11-05
 
 ### Added
