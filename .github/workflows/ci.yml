@@ -9,17 +9,25 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
 jobs:
   check:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
-      - name: Install Claude Code
+      # The official installer verifies the binary's SHA-256 against Anthropic's manifest.
+      - name: Install Claude Code (latest)
         run: |
-          curl -fsSL https://claude.ai/install.sh | bash
+          curl -fsSL --proto '=https' --tlsv1.2 https://claude.ai/install.sh -o "$RUNNER_TEMP/install.sh"
+          bash "$RUNNER_TEMP/install.sh" latest
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Validate
@@ -30,11 +38,15 @@ jobs:
 
       - name: Version bumped for shipped changes
         if: github.event_name != 'push' || !startsWith(github.ref, 'refs/tags/')
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+          BEFORE: ${{ github.event.before }}
         run: |
-          if [ "${{ github.event_name }}" = pull_request ]; then
-            base="origin/${{ github.base_ref }}"
+          if [ "$EVENT" = pull_request ]; then
+            base="origin/$BASE_REF"
           else
-            base="${{ github.event.before }}"
+            base="$BEFORE"
             # First push of a branch has no "before" commit.
             git cat-file -e "$base^{commit}" 2>/dev/null || base=HEAD~1
           fi
@@ -44,10 +56,13 @@ jobs:
     needs: check
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Tag matches plugin.json
         run: |
