@@ -1,6 +1,6 @@
 {
   "name": "comprehension-check",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "After a turn that changed code, Claude quizzes you on the change (single choice, checkboxes, free text) to sharpen understanding and critical thinking.",
   "author": {
     "name": "agharsallah"
