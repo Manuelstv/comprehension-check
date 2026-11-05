@@ -6,6 +6,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-11-05
+
 ### Added
 
 - **Colors in the quiz banner.** Single-choice questions (◉) are blue and checkbox questions (☑) purple, so the format reads at a glance; **pick ALL** is bold amber, question numbers bold, and the tips grey. The gate banner gets the same treatment. Colors come from the theme, so they suit light and dark terminals.
@@ -98,7 +100,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Mid-turn reminder plus a `Stop` hook fallback, so the quiz is asked once per turn.
 - `/quiz on|off|status`; the on/off setting persists across sessions.
 
-[Unreleased]: https://github.com/agharsallah/comprehension-check/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/agharsallah/comprehension-check/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/agharsallah/comprehension-check/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/agharsallah/comprehension-check/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/agharsallah/comprehension-check/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/agharsallah/comprehension-check/compare/v0.4.0...v0.5.0
