@@ -8,10 +8,21 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- **Quiz heads-up.** Before the questions, a "🧠 Quiz time!" dialog asks **Yes, quiz me / Not now**, with a banner naming the files and the number of questions. Choosing *Not now*, or pressing Esc, skips the quiz cleanly.
+- **Answering instructions** above the quiz: each question listed by number with its format (pick one, or pick all that apply), plus how to answer in your own words and how to skip.
+- **Scorecard.** Claude reports grades through the mod's new `quiz_results` tool, drawn as a card: a percentage that counts up next to a bar, a rating line, a ✅/🟡/❌ punchline for each question, your answer next to the right one, an explanation and `file:line`.
+- **Effects.** Confetti for 80% or more, a toast with the score, and sounds on macOS (fanfare, chime, womp).
+- **Stats.** Quizzes taken, average, best score and the streak of quizzes at 80% or more, shown on the scorecard and through `/quiz stats`.
+- `/quiz sound on|off`.
 - `CHANGELOG.md`, a release script (`scripts/release.sh`) and a version guard (`scripts/check-version.sh`).
 - CI that validates the mod, runs its tests and fails a change to shipped files that does not bump the version.
 - A GitHub Release is published for every `vX.Y.Z` tag, with notes taken from this file.
 - README sections on updating, versioning, releasing and troubleshooting.
+
+### Changed
+
+- Claude marks the quiz with `metadata.source: "comprehension-check"`, and its feedback is punchier: one line of at most 12 words per answer, then a one- or two-sentence explanation.
+- The hooks module is now `hooks/register.tsx` (JSX for the scorecard), with a state contract in `types/index.d.ts`.
 
 ## [0.1.0] - 2026-11-05
 

@@ -11,19 +11,55 @@ learning moment. When Claude edits code during a turn, it ends the turn with a f
 what it changed. It then tells you which answers were right and why. The aim is that you understand
 and can defend every line that lands in your repo.
 
-<sub>An example quiz (illustrative):</sub>
+It plays out in three beats:
+
+**1. A heads-up.** You choose whether to take the quiz now.
 
 ```
-╭─ Questions ─────────────────────────────────────────────────────────────╮
-│ In src/cache.ts, why does `get()` check `expiresAt` before reading?     │
-│   ○ To avoid a race with the background sweeper                         │
-│   ○ So a stale entry is never returned between sweeps                   │
-│   ○ Because Map.get() is slower than a timestamp compare                │
-│   ○ Other…                                                              │
-│                                                                         │
-│ Which inputs would make `parseRange("…")` throw? (pick all that apply)  │
-│   ☐ "10-"     ☐ "5-3"     ☐ "7"     ☐ "a-b"                             │
-╰─────────────────────────────────────────────────────────────────────────╯
+🧠 COMPREHENSION CHECK
+3 questions · about a minute
+On: register.tsx, README.md (+1)
+No hints. No penalty. You vs the diff.
+
+ ☐ Quiz time ─────────────────────────────────────────────
+ 🧠 Quiz time! Ready for 3 quick questions on what Claude just changed?
+ ❯ 1. Yes, quiz me
+   2. Not now
+```
+
+**2. The quiz.** Instructions above the questions tell you how to answer each one.
+
+```
+🧠 COMPREHENSION CHECK · 3 questions
+◉ Q1 Approach: pick one
+☑ Q2 Edge case: pick ALL that apply
+◉ Q3 Risk: pick one
+✎ Other: answer in your own words
+No answer is marked. Esc skips.
+```
+
+**3. The scorecard.** It shows your score with a count-up bar, a punchy line for each answer and confetti when you do well.
+
+```
+╭──────────────────────────────────────────────────────────────────────╮
+│ ✦✧*·+·★✶✦✧*·+·★✶✦✧*·+·★✶✦✧*·                                         │
+│ 🔥  83% ████████████████████░░░░ 2.5/3                                │
+│ Sharp! Barely a scratch.                                             │
+│                                                                      │
+│ ✅ Q1 · Why the gate Correct                                          │
+│    Nailed it: one hook catches both paths.                           │
+│    You said: Intercept the quiz call                                 │
+│    Gating the quiz call covers the reminder and the Stop fallback.   │
+│    ↳ hooks/register.tsx:318                                          │
+│                                                                      │
+│ 🟡 Q2 · Skipping the gate Partly                                      │
+│    Half there: it also wipes the owed files.                         │
+│    You said: Turn ends  ·  Answer: Turn ends, files cleared          │
+│    Without clearing, the Stop hook would push Claude straight back.  │
+│                                                                      │
+│ ➜ Next: Read fitRows and try a 4-question quiz with long headers.    │
+│ 📈 7 quizzes · average 81% · best 100% · streak 3 (80%+ in a row)    │
+╰──────────────────────────────────────────────────────────────────────╯
 ```
 
 ## Contents
@@ -67,7 +103,10 @@ Quizzes are on as soon as the mod is installed. To uninstall it, run `claude plu
 
 ## Usage
 
-Work with Claude as usual. When a turn changes code, Claude asks 2–4 questions in a single dialog before it ends the turn:
+Work with Claude as usual. When a turn changes code, Claude first asks whether you want the quiz now: **Yes, quiz me** or **Not now**.
+If you choose **Not now** or press Esc, the turn ends and Claude does not ask again until the next change.
+
+If you choose yes, Claude asks 2–4 questions in a single dialog. Above the questions, a short guide lists each one by number and format:
 
 - **Single choice.** One correct answer and plausible distractors.
 - **Checkboxes.** More than one option is correct.
@@ -77,11 +116,15 @@ The questions cover judgment rather than trivia: why one approach was chosen ove
 what happens with an edge-case input, trade-offs, how you would check that it works, and what risk is left.
 The correct answer is never marked or hinted at.
 
-After you answer, Claude grades each question as correct, partly correct or incorrect. It explains the reasoning, names the
-misconception if there is one, and points to `file:line`. Claude makes no edits during the quiz. If one of your answers shows a
-real bug, Claude proposes a fix and waits for you to approve it.
+After you answer, Claude grades each question and shows a **scorecard**:
 
-To skip a quiz, dismiss the dialog. The turn then ends and Claude does not ask again.
+- **Score.** Your percentage counts up next to a bar in the colour of your result. Correct answers score 1 and partly correct answers ½.
+- **A rating line** that matches the score, from 🏆 *Flawless* to 💥 *Ouch. Time for a slow re-read.*
+- **For each question:** ✅, 🟡 or ❌, a one-line punchline about your answer, what you said next to the right answer, a one- or two-sentence explanation, and the `file:line` it refers to.
+- **Effects.** Confetti for 80% or more, a toast with your score, and a short sound (a fanfare for 100%, a chime for 50% or more, a "womp" below that).
+- **Your record:** quizzes taken, average, best score, and your streak of quizzes at 80% or more.
+
+Claude makes no edits during the quiz. If one of your answers shows a real bug, Claude proposes a fix and waits for you to approve it.
 
 ### Commands
 
@@ -90,16 +133,23 @@ To skip a quiz, dismiss the dialog. The turn then ends and Claude does not ask a
 | `/quiz on` | Turn quizzes on (the default) |
 | `/quiz off` | Turn quizzes off. The setting persists across sessions. |
 | `/quiz status` (or `/quiz`) | Show whether quizzes are on |
+| `/quiz stats` | Show your record: quizzes, average, best score and streak |
+| `/quiz sound on` / `/quiz sound off` | Turn the scorecard sounds on (the default) or off |
 
 ## How it works
 
-The mod is a single hooks module, [`hooks/register.ts`](hooks/register.ts):
+The mod is a single hooks module, [`hooks/register.tsx`](hooks/register.tsx):
 
 1. **`tool.call`** watches for successful `Edit`, `Write` and `NotebookEdit` calls, including those made by subagents, and records each changed path.
 2. On the first edit of a turn it adds a hidden note to the conversation. The note tells Claude to finish the task and then run the quiz.
 3. **`classic.Stop`** is the fallback. If Claude tries to end a turn that changed files and has not asked a quiz yet, the hook sends it back once with the list of changed files.
-4. An `AskUserQuestion` call from the main agent counts as the quiz and clears the list, so the quiz is asked at most once per turn.
-5. The on/off flag is kept in the mod's persistent store (`$.store`).
+4. Claude marks its quiz with `metadata.source: "comprehension-check"`. The mod intercepts that `AskUserQuestion` call and first asks you
+   **Yes / Not now** (`$.ui.ask`). On *Not now*, the call is refused with a note telling Claude to drop the quiz.
+5. **`ui.render` on `AskUserQuestion`** adds the banners above both dialogs. They fit the terminal's 12-row budget around the dialog.
+6. After grading, Claude calls the mod's own tool, `mcp__comprehension-check__quiz_results`, with structured verdicts and punchlines.
+   The mod computes the score, updates your stats and plays the effects. **`ui.render` on `ToolUse`** then draws that call as the scorecard.
+   The tool never needs your permission, because the mod allows it in a `tool.check` hook.
+7. The on/off and sound settings and your stats are kept in the mod's persistent store (`$.store`). Animation state is session state (`$.state`, typed in [`types/index.d.ts`](types/index.d.ts)).
 
 ## Updating
 
@@ -179,6 +229,9 @@ Users with auto-update get the new version the next time they start Claude Code.
 | Symptom | Fix |
 | --- | --- |
 | No quiz after Claude edited files | Run `/quiz status`. If quizzes are off, run `/quiz on`. |
+| Quiz appears without the yes/no step | Claude left out `metadata.source`. The quiz still works, without the heads-up. |
+| Plain text feedback instead of a scorecard | The mod was reloaded mid-session and the tool was not registered yet. Feedback still arrives, as text. |
+| Sounds are too much | Run `/quiz sound off`. |
 | No quiz after a change made through Bash | Expected. Edits made with shell commands such as `sed -i` are not tracked (see [Limitations](#limitations)). |
 | An update does not show up | Run `claude plugin marketplace update comprehension-check`, then `claude plugin update comprehension-check@comprehension-check`, then restart Claude Code. |
 | You want to inspect the hooks | Start with `claude --debug`. Errors from the mod's hooks are logged with the prefix `comprehension-check:`. |
@@ -187,6 +240,7 @@ Users with auto-update get the new version the next time they start Claude Code.
 
 - Changes made through shell commands (`sed -i`, `echo > file`, code generators) are not detected.
 - Each quiz is an extra exchange with the model, so it uses more tokens.
+- Sounds play only on macOS (`afplay`). Linux and Windows terminals stay silent.
 - The mod stores its changed-file list in memory. If the mod reloads mid-turn, that turn's quiz can be skipped.
 
 ## License

@@ -2,8 +2,16 @@
   "name": "comprehension-check",
   "version": "0.1.0",
   "description": "After a turn that changed code, Claude quizzes you on the change (single choice, checkboxes, free text) to sharpen understanding and critical thinking.",
-  "author": { "name": "agharsallah" },
+  "author": {
+    "name": "agharsallah"
+  },
   "repository": "https://github.com/agharsallah/comprehension-check",
   "license": "MIT",
-  "keywords": ["learning", "quiz", "code-review", "critical-thinking"]
+  "keywords": [
+    "learning",
+    "quiz",
+    "code-review",
+    "critical-thinking"
+  ],
+  "types": "./types/index.d.ts"
 }
