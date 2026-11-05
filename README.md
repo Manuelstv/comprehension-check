@@ -4,12 +4,13 @@
 [![Release](https://img.shields.io/github/v/release/agharsallah/comprehension-check?sort=semver)](https://github.com/agharsallah/comprehension-check/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-**A Claude Code mod that quizzes you on the code Claude just wrote.**
+**A Claude Code mod that quizzes you on the code Claude just wrote, or on any commit, diff or codebase you point it at.**
 
 AI-written code is easy to accept without reading. comprehension-check makes every change a short
 learning moment. When Claude edits code during a turn, it ends the turn with a few questions about
 what it changed. It then tells you which answers were right and why. The aim is that you understand
-and can defend every line that lands in your repo.
+and can defend every line that lands in your repo. You can also ask for a quiz at any time with
+`/quiz last`, `/quiz uncommitted` or `/quiz codebase` (see [Quiz on demand](#quiz-on-demand)).
 
 It plays out in three beats:
 
@@ -147,7 +148,7 @@ Claude makes no edits during the quiz. If one of your answers shows a real bug, 
 | `/quiz uncommitted` | Quiz you now on your uncommitted changes: staged, unstaged and new files. `changes`, `diff` and `wip` work too. |
 | `/quiz codebase` | Quiz you now on the whole codebase as it stands. `all`, `repo` and `project` work too. |
 | `/quiz on` | Turn quizzes on (the default) |
-| `/quiz off` | Turn quizzes off. The setting persists across sessions. |
+| `/quiz off` | Turn the automatic quizzes after Claude's edits off. The quizzes you ask for still run. The setting persists across sessions. |
 | `/quiz status` (or `/quiz`) | Show whether quizzes are on |
 | `/quiz stats` | Show your record: quizzes, average, best score and streak |
 | `/quiz settings` | Open the settings menu: sound, max questions, quiz length and perspective |
@@ -160,15 +161,13 @@ Claude makes no edits during the quiz. If one of your answers shows a real bug, 
 
 ### Quiz on demand
 
-`/quiz last`, `/quiz last 5`, `/quiz uncommitted` and `/quiz codebase` start a quiz right away on code read from git,
-whoever wrote it. The command prints what it found (`🧠 Quiz on the last commit: 3 files, 120 lines · up to 4 questions · Mixed perspective.`)
-and Claude asks the quiz in the next turn.
+The `last`, `uncommitted` and `codebase` commands start a quiz right away on code read from git, whoever wrote it,
+including changes made through shell commands, which the automatic quiz misses. The command prints what it found
+(`🧠 Quiz on the last commit: 3 files, 120 lines · up to 4 questions · Mixed perspective.`), and Claude asks the quiz in the next turn.
 
-- **Your settings apply.** Max questions, length and perspective work as for any quiz. With **Fits change size**, the lines
-  counted are the lines in the commits, the uncommitted diff, or (for the codebase) every line of every file.
+- **Your settings apply.** With **Fits change size**, the lines counted are those in the commits, the uncommitted diff, or (for the codebase) every line of every file.
 - **No yes/no step.** You asked for the quiz, so it goes straight to you. Esc still skips it.
-- **It runs with quizzes off.** `/quiz off` stops the automatic quizzes after Claude's edits, not the ones you ask for.
-- **Lock files never count**, and git-ignored files are never read. Binary files are left out. New files git does not track yet count as uncommitted.
+- **What is read:** the same files as for any quiz (see [Settings](#settings) for lock and git-ignored files), less binary files. New files git does not track yet count as uncommitted.
 - For `/quiz codebase`, Claude reads the most important and riskiest parts rather than every file, and asks about the code as it stands.
 - Outside a git repository, or when there is nothing to quiz on, the command says so and no quiz starts.
 
@@ -200,7 +199,7 @@ Each setting can also be set in one line, as in the table above. Settings persis
 | **Perspective** | **Mixed**, **Code**, **Architecture**, **Product** (see [Usage](#usage)) | Mixed |
 
 With **Fits change size**, 1–100 changed lines get 1 question, 101–200 get 2, and so on, up to your max.
-A quiz of more than 4 questions comes in rounds of up to 4. If you press Esc during a later round, Claude asks no more and grades the rounds you answered.
+If you press Esc during a later round of a long quiz, Claude asks no more and grades the rounds you answered.
 
 Lines changed are counted as a diff counts them: lines removed plus lines added by each `Edit`, and every line of a `Write`.
 If the change grows mid-turn, Claude gets a note with the new count. A quiz of the wrong length goes back to Claude before you see it.
@@ -243,7 +242,7 @@ The hooks module's entry point is [`hooks/register.tsx`](hooks/register.tsx). It
 | `hooks/ui/` | The banners above the question dialogs |
 | `hooks/update/` | `/quiz version` and `/quiz update` |
 | `hooks/commands/` | The `/quiz` command |
-| `hooks/lib/` | Small helpers with no mod logic: semver, text and safe value reads |
+| `hooks/lib/` | Small helpers with no mod logic: semver, text, timers and safe value reads |
 | [`evals/`](evals/README.md) | Model evals of the quiz prompt, run with `claude plugin eval` |
 | `scripts/build-evals.ts` | Writes the eval prompts that embed the quiz text, so they never drift from `hooks/quiz/prompts.ts` |
 
@@ -310,6 +309,11 @@ claude --plugin-dir .           # a session with the mod loaded from this folder
 scripts/check-version.sh        # is the version bumped for what changed vs origin/main?
 ```
 
+The test harness starts and ends turns only when a test says so, and the real engine does not always do what a test does.
+A local command such as `/quiz last` has no turn around it, and the engine refuses a prompt submitted while a hook runs.
+So check any flow that depends on when events fire in a live session, as well as in tests: `claude --plugin-dir .`, or headless with
+`claude -p --input-format stream-json --output-format stream-json --verbose --plugin-dir . --debug-file <path>`.
+
 ### Evals
 
 The tests check the code. The [evals](evals/README.md) check the **prompt**: they run real models and score the quizzes Claude writes.
@@ -356,13 +360,15 @@ Users with auto-update get the new version the next time they start Claude Code.
 | Sounds are too much | Run `/quiz settings sound off`. |
 | Quizzes are too long | Run `/quiz settings max 2`, or `/quiz settings length size` so small changes get 1 question. |
 | No quiz after editing a generated file | Expected if git ignores it, or if it is a lock file (see [Settings](#settings)). |
-| No quiz after a change made through Bash | Expected. Edits made with shell commands such as `sed -i` are not tracked (see [Limitations](#limitations)). |
+| No quiz after a change made through Bash | Expected. Edits made with shell commands such as `sed -i` are not tracked. Run `/quiz uncommitted` to be quizzed on them. |
+| `/quiz last` (or `uncommitted`, `codebase`) prints its summary, but no quiz follows | Run `claude --debug` and look for `comprehension-check: the quiz prompt did not go in`, which gives the reason. Another plugin may have refused the prompt. |
 | An update does not show up | Run `/quiz update` and then `/reload-plugins`. From a shell: `claude plugin marketplace update comprehension-check`, then `claude plugin update comprehension-check@comprehension-check`, then restart Claude Code. |
 | You want to inspect the hooks | Start with `claude --debug`. Errors from the mod's hooks are logged with the prefix `comprehension-check:`. |
 
 ## Limitations
 
-- Changes made through shell commands (`sed -i`, `echo > file`, code generators) are not detected.
+- Changes made through shell commands (`sed -i`, `echo > file`, code generators) do not trigger a quiz. `/quiz uncommitted` covers them.
+- Quizzes on demand need a git repository.
 - Each quiz is an extra exchange with the model, so it uses more tokens.
 - Sounds play only on macOS (`afplay`). Linux and Windows terminals stay silent.
 - The mod stores its changed-file list in memory. If the mod reloads mid-turn, that turn's quiz can be skipped.
