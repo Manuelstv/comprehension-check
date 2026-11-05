@@ -154,6 +154,22 @@ export const COMMAND_MENU = {
   maxRounds: 12,
 } as const
 
+// How each part of the banners above the gate and quiz dialogs is drawn, by
+// its role (ui/bannerLines.ts). Theme colors, so they suit light and dark.
+// Single choice and checkboxes get different colors so the format reads at a
+// glance; "pick ALL" is the one thing that must not be missed.
+export const BANNER_TONES = {
+  title: { color: 'claude', bold: true },
+  strong: { bold: true },
+  single: { color: 'suggestion' },
+  multi: { color: 'merged' },
+  alert: { color: 'warning', bold: true },
+  other: { color: 'success' },
+  accent: { color: 'claude', italic: true },
+  plain: {},
+  muted: { dimColor: true },
+} as const
+
 // Rows the terminal leaves the banner above a question dialog, and the width
 // it counts one row at.
 export const DIALOG_LAYOUT = { rows: 12, rowColumns: 40 } as const

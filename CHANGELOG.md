@@ -8,6 +8,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- **Colors in the quiz banner.** Single-choice questions (◉) are blue and checkbox questions (☑) purple, so the format reads at a glance; **pick ALL** is bold amber, question numbers bold, and the tips grey. The gate banner gets the same treatment. Colors come from the theme, so they suit light and dark terminals.
 - **A menu for `/quiz`.** Run on its own, `/quiz` opens a list of every command, each with what it does, and runs the one you pick. **last** then asks how many commits (1, 3, 5, 10, or type one). Any command can be typed under Other. Esc shows the status, as `/quiz` did before.
 - **Autocomplete for `/quiz`.** Typing `/quiz` lists every subcommand with what it does, to pick with ↑ ↓ and Tab. Tab finishes a started word (`/quiz unc` → `uncommitted`), including setting names and their values, which show the current one. The rows come from the same tables the command runs on.
 

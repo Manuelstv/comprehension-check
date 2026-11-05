@@ -566,6 +566,10 @@ test('the quiz dialog shows how to answer each question', async ($, on) => {
     expect((await ui.find({ type: 'Text', text: /Q1 Approach/ }))?.text).toContain('pick one')
     expect((await ui.find({ type: 'Text', text: /Q2 Edge cases/ }))?.text).toContain('pick ALL that apply')
     expect(await ui.find({ type: 'Text', text: /own words/ })).toBeDefined()
+    // The parts carry their colors: the formats apart, ALL hard to miss.
+    expect((await ui.find({ type: 'Text', text: /^pick ALL$/ }))?.props).toMatchObject({ color: 'warning', bold: true })
+    expect((await ui.find({ type: 'Text', text: /^☑ $/ }))?.props).toMatchObject({ color: 'merged' })
+    expect((await ui.find({ type: 'Text', text: /^◉ $/ }))?.props).toMatchObject({ color: 'suggestion' })
     await ui.unmount()
   }
 })

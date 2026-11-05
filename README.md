@@ -28,13 +28,14 @@ No hints. No penalty. You vs the diff.
    2. Not now
 ```
 
-**2. The quiz.** Instructions above the questions tell you how to answer each one.
+**2. The quiz.** Instructions above the questions tell you how to answer each one. Each format has its own color:
+single choice (◉) in blue, checkboxes (☑) in purple with **pick ALL** in bold amber, and the tips in grey.
 
 ```
 🧠 COMPREHENSION CHECK · 3 questions
-◉ Q1 Approach: pick one
-☑ Q2 Edge case: pick ALL that apply
-◉ Q3 Risk: pick one
+◉ Q1 Approach · pick one
+☑ Q2 Edge case · pick ALL that apply
+◉ Q3 Risk · pick one
 ✎ Other: answer in your own words
 No answer is marked. Esc skips.
 ```
@@ -246,6 +247,8 @@ The hooks module's entry point is [`hooks/register.tsx`](hooks/register.tsx). It
 4. Claude marks its quiz with `metadata.source: "comprehension-check"`. The mod intercepts that `AskUserQuestion` call and first asks you
    **Yes / Not now** (`$.ui.ask`). On *Not now*, the call is refused with a note telling Claude to drop the quiz.
 5. **`ui.render` on `AskUserQuestion`** adds the banners above both dialogs. They fit the terminal's 12-row budget around the dialog.
+   Each line is built from parts with a role (`ui/bannerLines.ts`), and `BANNER_TONES` in `config.ts` maps each role to a theme color.
+   The terminal draws the dialog's own text plain, so the colors live in the banner.
 6. After grading, Claude calls the mod's own tool, `mcp__comprehension-check__quiz_results`, with structured verdicts and punchlines.
    The mod computes the score, updates your stats and plays the effects. **`ui.render` on `ToolUse`** then draws that call as the scorecard.
    The tool never needs your permission, because the mod allows it in a `tool.check` hook.

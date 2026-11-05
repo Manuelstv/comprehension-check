@@ -30,7 +30,7 @@ import { SCOPES_USAGE, describeScope, parseScope } from '../hooks/scopes/scopes'
 import { SETTING_DEFINITIONS } from '../hooks/settings/definitions'
 import { SETTINGS_USAGE } from '../hooks/settings/settings'
 import { menuPages, pageRow } from '../hooks/ui/menuPages'
-import { fileListLine, fitRows } from '../hooks/ui/bannerLines'
+import { fileListLine, fitRows, gateBannerLines, lineText, quizBannerLines } from '../hooks/ui/bannerLines'
 
 test('semver: later versions are newer, a pre-release is below its release', async () => {
   expect(isNewerVersion('0.3.0', '0.2.9')).toBe(true)
@@ -457,4 +457,36 @@ test('menu rows: every subcommand but status, one switch for the automatic quizz
   expect(menuChoices(false).map(c => c.value)).not.toContain('off')
   for (const choice of menuChoices(true)) expect(choice.description.length).toBeGreaterThan(10)
   expect(commitCountChoices().map(c => c.value)).toEqual(['last 1', 'last 3', 'last 5', 'last 10'])
+})
+
+// ─── Banners ─────────────────────────────────────────────────────────────────
+
+test('banner lines: each part has a role, and a checkbox question flags ALL', async () => {
+  const lines = quizBannerLines([{ header: 'Approach' }, { header: 'Edge case', multiSelect: true }])
+  expect(lines.map(lineText)).toEqual([
+    '🧠 COMPREHENSION CHECK · 2 questions',
+    '◉ Q1 Approach · pick one',
+    '☑ Q2 Edge case · pick ALL that apply',
+    '✎ Other: answer in your own words',
+    'No answer is marked. Esc skips.',
+  ])
+  expect(lines[0]?.[0]?.tone).toBe('title')
+  expect(lines[1]?.[0]).toEqual({ text: '◉ ', tone: 'single' })
+  expect(lines[2]?.[0]).toEqual({ text: '☑ ', tone: 'multi' })
+  expect(lines[2]?.find(part => part.text === 'pick ALL')?.tone).toBe('alert')
+  expect(lines[4]?.every(part => part.tone === 'muted')).toBe(true)
+
+  expect(gateBannerLines(['/r/a.ts'], 3).map(lineText)).toEqual([
+    '🧠 COMPREHENSION CHECK',
+    '3 questions · about a minute',
+    'On: a.ts',
+    'No hints. No penalty. You vs the diff.',
+  ])
+})
+
+test('banner lines: a long quiz drops its last lines to fit, never the title', async () => {
+  const many = Array.from({ length: 20 }, (_, i) => ({ header: `Header ${i}` }))
+  const lines = quizBannerLines(many)
+  expect(lines.length).toBeLessThan(22)
+  expect(lineText(lines[0]!)).toContain('20 questions')
 })
