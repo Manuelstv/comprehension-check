@@ -143,6 +143,9 @@ Claude makes no edits during the quiz. If one of your answers shows a real bug, 
 
 | Command | Effect |
 | --- | --- |
+| `/quiz last [n]` | Quiz you now on the last commit, or the last `n` commits (1–100) |
+| `/quiz uncommitted` | Quiz you now on your uncommitted changes: staged, unstaged and new files. `changes`, `diff` and `wip` work too. |
+| `/quiz codebase` | Quiz you now on the whole codebase as it stands. `all`, `repo` and `project` work too. |
 | `/quiz on` | Turn quizzes on (the default) |
 | `/quiz off` | Turn quizzes off. The setting persists across sessions. |
 | `/quiz status` (or `/quiz`) | Show whether quizzes are on |
@@ -154,6 +157,20 @@ Claude makes no edits during the quiz. If one of your answers shows a real bug, 
 | `/quiz settings perspective mixed\|code\|architect\|product` | The angle the questions take (default mixed). `lens` and `view` work too, as do `architecture`, `dev` and `pm`. |
 | `/quiz version` | Show the installed version, and whether a newer one is out |
 | `/quiz update` | Update the mod to the latest version, then tell you to run `/reload-plugins` |
+
+### Quiz on demand
+
+`/quiz last`, `/quiz last 5`, `/quiz uncommitted` and `/quiz codebase` start a quiz right away on code read from git,
+whoever wrote it. The command prints what it found (`🧠 Quiz on the last commit: 3 files, 120 lines · up to 4 questions · Mixed perspective.`)
+and Claude asks the quiz in the next turn.
+
+- **Your settings apply.** Max questions, length and perspective work as for any quiz. With **Fits change size**, the lines
+  counted are the lines in the commits, the uncommitted diff, or (for the codebase) every line of every file.
+- **No yes/no step.** You asked for the quiz, so it goes straight to you. Esc still skips it.
+- **It runs with quizzes off.** `/quiz off` stops the automatic quizzes after Claude's edits, not the ones you ask for.
+- **Lock files never count**, and git-ignored files are never read. Binary files are left out. New files git does not track yet count as uncommitted.
+- For `/quiz codebase`, Claude reads the most important and riskiest parts rather than every file, and asks about the code as it stands.
+- Outside a git repository, or when there is nothing to quiz on, the command says so and no quiz starts.
 
 ### Settings
 
@@ -205,7 +222,12 @@ The hooks module's entry point is [`hooks/register.tsx`](hooks/register.tsx). It
 6. After grading, Claude calls the mod's own tool, `mcp__comprehension-check__quiz_results`, with structured verdicts and punchlines.
    The mod computes the score, updates your stats and plays the effects. **`ui.render` on `ToolUse`** then draws that call as the scorecard.
    The tool never needs your permission, because the mod allows it in a `tool.check` hook.
-7. The on/off switch, the settings (`settings/settings.ts`) and your stats are kept in the mod's persistent store (`$.store`). Animation state is session state (`$.state`, typed in [`types/index.d.ts`](types/index.d.ts)).
+7. **`/quiz last|uncommitted|codebase`** reads the scope from git and returns the quiz instructions as the command's hidden `context`.
+   The engine refuses a prompt submitted while a `command.run` hook is running, and a local command has no turn around it
+   (no `turn.complete`), so a detached task submits the short prompt (`Quiz me on the last commit.`) once the hook has returned.
+   In the turn that prompt starts, the quiz call skips the yes/no step and is sized on the requested changes. A later turn
+   drops the request. If the prompt does not go in, the reason is logged for `claude --debug`.
+8. The on/off switch, the settings (`settings/settings.ts`) and your stats are kept in the mod's persistent store (`$.store`). Animation state is session state (`$.state`, typed in [`types/index.d.ts`](types/index.d.ts)).
 
 ### Code layout
 
@@ -213,7 +235,8 @@ The hooks module's entry point is [`hooks/register.tsx`](hooks/register.tsx). It
 | --- | --- |
 | [`hooks/config.ts`](hooks/config.ts) | Every tunable: names, question limits, size steps, lock files, score tiers, timings, update commands |
 | `hooks/register.tsx` | The entry point. It creates the change tracker and other shared parts and registers each feature. |
-| `hooks/quiz/` | When to quiz: edits, reminders to Claude, the Yes / Not now gate, the Stop fallback, the question count and the prompts |
+| `hooks/quiz/` | When to quiz: edits, reminders to Claude, the Yes / Not now gate, the Stop fallback, the question count, the prompts, and the quiz the user asked for (`quizRequest.ts`) |
+| `hooks/scopes/` | Quizzes on demand: the scopes (`scopes.ts`), the git output parsers (`gitOutput.ts`), reading a scope from git (`collectScope.ts`), the words for it (`scopeText.ts`) and the command flow (`requestQuiz.ts`) |
 | `hooks/changes/` | What changed: paths and line counts of edits, lock and git-ignored files, and the files owed a quiz |
 | `hooks/settings/` | The settings, defined once as a table (`definitions.ts`), the store (`settings.ts`) and the settings menu (`settingsMenu.ts`) |
 | `hooks/scorecard/` | The results tool, grading, score tiers, stats and the scorecard drawing |
@@ -223,6 +246,9 @@ The hooks module's entry point is [`hooks/register.tsx`](hooks/register.tsx). It
 | `hooks/lib/` | Small helpers with no mod logic: semver, text and safe value reads |
 | [`evals/`](evals/README.md) | Model evals of the quiz prompt, run with `claude plugin eval` |
 | `scripts/build-evals.ts` | Writes the eval prompts that embed the quiz text, so they never drift from `hooks/quiz/prompts.ts` |
+
+To add an on-demand scope, add one entry to `SCOPE_DEFINITIONS` in `hooks/scopes/scopes.ts` and a case to `snapshotOf` in `hooks/scopes/collectScope.ts`.
+TypeScript then points to every `switch` on the scope kind that needs a case.
 
 To add a setting, add one entry to `SETTING_DEFINITIONS` in `hooks/settings/definitions.ts`. The command line, the menu and the summary all pick it up. A setting with `choices` gets a picker in the menu. The menu holds at most 4 settings, because a dialog holds at most 4 options.
 

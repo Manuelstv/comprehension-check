@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- **Quizzes on demand.** `/quiz last` quizzes you on the last commit, `/quiz last <n>` on the last 1 to 100 commits, `/quiz uncommitted` on your staged, unstaged and new files, and `/quiz codebase` on the whole codebase as it stands. They read the code from git, follow your max questions, length and perspective settings, skip the yes/no step (you asked), and run even with `/quiz off`. Lock files never count and binary files are left out.
+
 ## [0.5.0] - 2026-11-05
 
 ### Added

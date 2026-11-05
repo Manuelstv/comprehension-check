@@ -89,7 +89,16 @@ const perspectiveRule = (perspective: Perspective): string => {
   return `Perspective: ${lens.name}. The user chose to be quizzed on ${lens.focus}, so EVERY question takes this angle, including the riskiest-part, decision and test questions below. ${lens.elsewhere[0]?.toUpperCase()}${lens.elsewhere.slice(1)} belong to other perspectives: leave them out unless you can ask them as a ${lens.name.toLowerCase()} question. If the change barely touches this angle, ask how it could still reach it rather than switching angle. Good angles:${angleList(lens)}`
 }
 
-export const quizInstructions = (count: QuestionCount, perspective: Perspective) => `1. ${howToAsk(count)} The mod first asks the user whether they want the quiz, then shows answering instructions above your questions.
+// `requested`: the user asked for this quiz (`/quiz last` and the like), so
+// it goes to them without the yes/no question first.
+export type QuizOptions = { requested?: boolean }
+
+const howItReachesThem = ({ requested = false }: QuizOptions) =>
+  requested
+    ? 'The user asked for this quiz, so it goes straight to them, with answering instructions above your questions.'
+    : 'The mod first asks the user whether they want the quiz, then shows answering instructions above your questions.'
+
+export const quizInstructions = (count: QuestionCount, perspective: Perspective, options: QuizOptions = {}) => `1. ${howToAsk(count)} ${howItReachesThem(options)}
 2. ${QUIZ_GOAL}
 3. ${perspectiveRule(perspective)}
 4. Every question must:
@@ -135,6 +144,42 @@ Files changed: ${files.map(f => `\n- ${f}`).join('')}
 
 Do this now:
 ${quizInstructions(count, perspective)}`
+
+// What an on-demand quiz is about, as Claude is told it.
+export type QuizSubject = {
+  // "the last 2 commits (a1b2c3d Fix the cache; …)"
+  what: string
+  // How to read it: the git command, or the files themselves.
+  howToRead: string
+  // One line per file, largest first, and how many more were left out.
+  fileLines: readonly string[]
+  moreFiles: number
+  files: number
+  lines: number
+  // True for code as it stands rather than a diff (`/quiz codebase`).
+  isWholeCode: boolean
+}
+
+// The rules speak of "the change" and "a decision Claude made"; this says
+// what those mean when the user picked the code.
+const subjectReading = (subject: QuizSubject) =>
+  subject.isWholeCode
+    ? 'This quiz is on the code as it stands, not on a recent change. In the rules below, "the change" means this code: read its most important and riskiest parts (entry points, core logic, state, error handling); you do not need to read every file. "A decision Claude made" means a design decision in the code that reading it does not explain.'
+    : 'In the rules below, "the change" means this diff, whoever wrote it, and "a decision Claude made" means a decision its author made that the diff does not explain.'
+
+// Left for Claude by `/quiz last|uncommitted|codebase`, before the prompt
+// that starts the quiz's turn.
+export const requestedQuizNote = (subject: QuizSubject, count: QuestionCount, perspective: Perspective) => {
+  const more = subject.moreFiles > 0 ? `\n- … and ${subject.moreFiles} more` : ''
+  return `${TAG} The user asked to be quizzed on ${subject.what}. Read it first: ${subject.howToRead}
+
+Files: ${subject.files} ${plural(subject.files, 'file')}, about ${subject.lines} lines, largest first:${subject.fileLines.map(line => `\n- ${line}`).join('')}${more}
+
+${subjectReading(subject)}
+
+Then quiz the user:
+${quizInstructions(count, perspective, { requested: true })}`
+}
 
 // The reply to a quiz round whose length breaks the settings.
 export const wrongLengthReply = (count: QuestionCount, asked: number, askedBefore = 0) => {

@@ -85,6 +85,25 @@ export const IGNORED_FILES = {
   gitCheckTimeoutMs: 5_000,
 } as const
 
+// ─── On-demand quizzes ───────────────────────────────────────────────────────
+
+// `/quiz last [n]`, `/quiz uncommitted`, `/quiz codebase`: a quiz on code read
+// from git rather than on the edits of a turn.
+export const ON_DEMAND = {
+  // The most commits `/quiz last <n>` takes.
+  maxCommits: 100,
+  // Files named to Claude, largest first; the rest are counted.
+  listedFiles: 30,
+  // Untracked files whose lines are counted (one git call each); past this
+  // many they are still listed, at 0 lines.
+  countedUntracked: 200,
+  // How long one git command may take.
+  gitTimeoutMs: 15_000,
+  // The wait after `/quiz last` returns before its prompt is submitted: the
+  // engine refuses one while the command is still running.
+  submitDelayMs: 0,
+} as const
+
 // ─── Dialogs ─────────────────────────────────────────────────────────────────
 
 // The yes/no question asked before the quiz.

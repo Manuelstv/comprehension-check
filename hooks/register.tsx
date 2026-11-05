@@ -2,6 +2,7 @@
 // feature. Every behavior lives in its own module:
 //
 //   quiz/        when to quiz: edits, reminders, the yes/no gate, the Stop fallback
+//   scopes/      quizzes on demand: the last commits, uncommitted changes, the codebase
 //   changes/     what changed: files, line counts, lock and git-ignored files
 //   settings/    the user's settings and the settings menu
 //   scorecard/   the results tool, grading, stats and the scorecard drawing
@@ -17,6 +18,7 @@ import { IgnoredFileCache } from './changes/ignoredFiles'
 import { defineQuizCommand, registerQuizCommand } from './commands/quizCommand'
 import { createOwnDialogs } from './quiz/ownDialogs'
 import { registerQuizFlow } from './quiz/quizFlow'
+import { QuizRequest } from './quiz/quizRequest'
 import { QuizRounds } from './quiz/quizRounds'
 import { TurnReminders } from './quiz/turnReminders'
 import { defineResultsTool, registerResultsTool } from './scorecard/resultsTool'
@@ -27,6 +29,7 @@ export const register: Register = on => {
   const changes = new ChangeTracker()
   const rounds = new QuizRounds()
   const ownDialogs = createOwnDialogs()
+  const request = new QuizRequest()
 
   on('session.start', async ($, e, next) => {
     await defineQuizCommand($)
@@ -34,7 +37,7 @@ export const register: Register = on => {
     return next(e)
   })
 
-  registerQuizCommand(on, { changes, ownDialogs })
+  registerQuizCommand(on, { changes, ownDialogs, request })
   registerResultsTool(on, rounds)
   registerQuizFlow(on, {
     changes,
@@ -42,6 +45,7 @@ export const register: Register = on => {
     rounds,
     ownDialogs,
     ignoredFiles: new IgnoredFileCache(),
+    request,
   })
   registerScorecardView(on)
   registerDialogBanners(on)

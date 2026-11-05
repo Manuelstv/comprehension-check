@@ -1,4 +1,7 @@
 import { expect, mock, test } from 'claude-code/testing'
+import type { Engine } from 'claude-code/testing'
+
+import { delay } from '../hooks/lib/timers'
 import type { On, RenderPropsOf } from 'claude-code'
 
 const EDIT = { tool: 'Edit', file_path: '/repo/a.kt', old_string: 'a', new_string: 'b' } as const
@@ -55,7 +58,7 @@ const GRADES = {
   next_step: 'Read the guard in a.kt.',
 } as const
 
-type Seen = { gate: string[]; quiz: number }
+type Seen = { gate: string[]; quiz: number; submitted: string[] }
 
 type EngineOptions = {
   // Paths `git check-ignore` reports as ignored.
@@ -64,12 +67,17 @@ type EngineOptions = {
   dismissQuiz?: (questions: number) => boolean
   // Answers `claude ...` commands (for /quiz update).
   claude?: (argv: readonly string[]) => { exitCode: number; stdout: string; stderr: string } | 'cannot start'
+  // Answers git commands other than check-ignore (for /quiz last and the like),
+  // given the arguments after `git -c core.quotePath=false`.
+  git?: (args: readonly string[]) => { exitCode: number; stdout: string }
+  // A reason to refuse every submitted prompt.
+  dropPrompts?: string
 }
 
 // Stands for the engine beneath the mod. The gate is the mod's own
 // AskUserQuestion, answered with `gateAnswer`.
 const engine = (on: On, gateAnswer: string | 'dismiss' = 'Yes, quiz me', opts: EngineOptions = {}) => {
-  const seen: Seen = { gate: [], quiz: 0 }
+  const seen: Seen = { gate: [], quiz: 0, submitted: [] }
   on('tool.call', (_, e) => {
     if (e.tool === 'AskUserQuestion') {
       const qs = (e as { questions: { question: string; header: string }[] }).questions
@@ -90,9 +98,19 @@ const engine = (on: On, gateAnswer: string | 'dismiss' = 'Yes, quiz me', opts: E
         ? { deny: 'CLI only' }
         : { value: { ...out, isStdoutTruncated: false, isStderrTruncated: false } }
     }
+    const done = (exitCode: number, stdout = '') =>
+      ({ value: { exitCode, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }) as const
+    if (!e.argv.includes('check-ignore')) {
+      const answer = opts.git?.(e.argv.slice(3))
+      return answer === undefined ? done(128) : done(answer.exitCode, answer.stdout)
+    }
     const path = e.argv[e.argv.length - 1] ?? ''
-    const exitCode = opts.ignored?.includes(path) === true ? 0 : 1
-    return { value: { exitCode, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+    return done(opts.ignored?.includes(path) === true ? 0 : 1)
+  })
+  on('turn.start', (_, e) => ({ turnId: e.turnId }))
+  on('prompt.submit', (_, e) => {
+    seen.submitted.push(e.text)
+    return opts.dropPrompts === undefined ? { text: e.text } : { drop: opts.dropPrompts }
   })
   on('classic.Stop', () => ({}))
   on('tool.register', (_, e) => ({ value: { tool: `mcp__comprehension-check__${e.name}` } }))
@@ -614,4 +632,136 @@ test('the scorecard shows the record after a graded quiz', async ($, on) => {
   })
   expect((await ui.find({ type: 'Text', text: /📈/ }))?.text).toContain('1 quiz · average 75%')
   await ui.unmount()
+})
+
+// ─── On-demand quizzes ───────────────────────────────────────────────────────
+
+// A repo at /repo: two commits, a staged change, an untracked file and a lock file.
+const repo = (over: { noCommits?: boolean; noRepo?: boolean; lines?: number } = {}) => (args: readonly string[]) => {
+  const ok = (stdout = '') => ({ exitCode: 0, stdout })
+  const lines = over.lines ?? 40
+  switch (args[0]) {
+    case 'rev-parse':
+      if (over.noRepo === true) return { exitCode: 128, stdout: '' }
+      if (args[1] === '--show-toplevel') return ok('/repo\n')
+      return over.noCommits === true ? { exitCode: 1, stdout: '' } : ok('abc1234\n')
+    case 'hash-object':
+      return ok('4b825dc642cb6eb9a060e54bf8d69288fbee4904\n')
+    case 'log':
+      return ok(`@\tabc1234\tfix: guard a\n\n${lines}\t0\tsrc/a.ts\n3\t3\tpnpm-lock.yaml\n@\tdef5678\tfeat: b\n\n2\t0\tsrc/b.ts\n`)
+    case 'diff':
+      if (args[1] === '--no-index') return { exitCode: 1, stdout: `7\t0\t/dev/null => ${args[args.length - 1]}\n` }
+      return ok(`${lines}\t2\tsrc/a.ts\n-\t-\tlogo.png\n`)
+    case 'ls-files':
+      return ok('src/new.ts\0')
+    default:
+      return { exitCode: 1, stdout: '' }
+  }
+}
+
+const quizCmd = (args: string) => ({ command: 'quiz', args, ...RUN })
+
+// The command has returned; its prompt goes in from a detached task (let it
+// land), and the quiz's own turn starts. A local command has no turn of its
+// own, so no turn.complete comes in between.
+const runQuizTurn = async ($: Engine, n = 1) => {
+  await delay(5)
+  await $.turn.start({ text: 'Quiz me.', turnId: `quiz${n}` })
+}
+
+test('/quiz last starts a quiz on the last commit, with no yes/no step', async ($, on) => {
+  const { seen } = engine(on, 'Not now', { git: repo() })
+  await $.session.start(START)
+
+  const r = await $.command.run(quizCmd('last'))
+  expect(r.text).toBe('🧠 Quiz on the last commit: 2 files, 42 lines · up to 4 questions · Mixed perspective.')
+  expect(r.context?.[0]).toContain('git show --no-renames abc1234 def5678')
+  expect(r.context?.[0]).not.toContain('pnpm-lock.yaml')
+  // Nothing is submitted while the command runs, which the engine refuses.
+  expect(seen.submitted).toEqual([])
+
+  await runQuizTurn($)
+  expect(seen.submitted).toEqual(['Quiz me on the last commit.'])
+  // The user asked for it: no gate, though they would say no to one.
+  const ran = await $.tool.call(QUIZ)
+  expect(ran.deny).toBeUndefined()
+  expect(seen.gate.length).toBe(0)
+  expect(seen.quiz).toBe(1)
+})
+
+test('/quiz last keeps to the settings: a longer quiz is sent back, a fitting one runs', async ($, on) => {
+  const { seen } = engine(on, 'Yes, quiz me', { git: repo() })
+  await $.session.start(START)
+  await $.command.run(quizCmd('settings max 1'))
+
+  await $.command.run(quizCmd('last 2'))
+  await runQuizTurn($)
+  expect((await $.tool.call(QUIZ)).deny).toContain('at most 1 question')
+  expect((await $.tool.call({ ...QUIZ, questions: QUIZ.questions.slice(0, 1) })).deny).toBeUndefined()
+  expect(seen.gate.length).toBe(0)
+})
+
+test('/quiz codebase in size mode: 1 question per 100 lines of the whole code', async ($, on) => {
+  const { seen } = engine(on, 'Yes, quiz me', { git: repo({ lines: 248 }) })
+  await $.session.start(START)
+  await $.command.run(quizCmd('settings length size'))
+
+  const r = await $.command.run(quizCmd('codebase'))
+  // src/a.ts: 248 + 2; src/new.ts: 7 (untracked); the binary is left out.
+  expect(r.text).toContain('2 files, 257 lines · 3 questions')
+  expect(r.context?.[0]).toContain('not on a recent change')
+  expect(r.context?.[0]).toContain('src/new.ts (7 lines, new)')
+
+  await runQuizTurn($)
+  expect((await $.tool.call(QUIZ)).deny).toContain('exactly 3 questions')
+  expect(seen.gate.length).toBe(0)
+})
+
+test('/quiz uncommitted runs, and is checked, with automatic quizzes off', async ($, on) => {
+  const { seen } = engine(on, 'Yes, quiz me', { git: repo({ noCommits: true }) })
+  await $.session.start(START)
+  await $.command.run(quizCmd('settings max 1'))
+  await $.command.run(quizCmd('off'))
+
+  const r = await $.command.run(quizCmd('uncommitted'))
+  expect(r.text).toContain('Quiz on the uncommitted changes')
+  await runQuizTurn($)
+  expect((await $.tool.call(QUIZ)).deny).toContain('at most 1 question')
+  expect(seen.quiz).toBe(0)
+})
+
+test('a requested quiz not asked in its turn does not carry over', async ($, on) => {
+  const { seen } = engine(on, 'Yes, quiz me', { git: repo() })
+  await $.session.start(START)
+
+  await $.command.run(quizCmd('last'))
+  await runQuizTurn($)
+  await $.turn.start({ text: 'Something else.', turnId: 't2' })
+  await $.tool.call(EDIT)
+  await $.tool.call(QUIZ)
+  // An ordinary quiz again: the user is asked first.
+  expect(seen.gate.length).toBe(1)
+})
+
+test('a quiz prompt the engine refuses leaves no request behind', async ($, on) => {
+  const { seen } = engine(on, 'Yes, quiz me', { git: repo(), dropPrompts: 'busy' })
+  await $.session.start(START)
+
+  await $.command.run(quizCmd('last'))
+  await runQuizTurn($)
+  await $.tool.call(EDIT)
+  await $.tool.call(QUIZ)
+  expect(seen.gate.length).toBe(1)
+})
+
+test('/quiz last outside a repo, or with a bad count, says why and starts nothing', async ($, on) => {
+  const { seen } = engine(on, 'Yes, quiz me', { git: repo({ noRepo: true }) })
+  await $.session.start(START)
+
+  expect((await $.command.run(quizCmd('last'))).text).toContain('Not in a git repository')
+  const bad = await $.command.run(quizCmd('last zero'))
+  expect(bad.text).toContain('"zero" is not a number of commits')
+  expect(bad.text).toContain('/quiz last [1-100]')
+  await runQuizTurn($)
+  expect(seen.submitted.length).toBe(0)
 })

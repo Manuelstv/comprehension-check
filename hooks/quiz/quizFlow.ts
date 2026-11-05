@@ -15,6 +15,7 @@ import { changeGrewNote, firstEditNote, skippedReply, unquizzedStopNote, wrongLe
 import { fitsQuestionCount, knownQuizLength, questionCountFor } from './questionCount'
 import type { QuestionCount } from './questionCount'
 import type { OwnDialogs } from './ownDialogs'
+import type { QuizRequest } from './quizRequest'
 import type { QuizRounds } from './quizRounds'
 import type { TurnReminders } from './turnReminders'
 
@@ -24,6 +25,7 @@ export type QuizFlowDeps = {
   rounds: QuizRounds
   ownDialogs: OwnDialogs
   ignoredFiles: IgnoredFileCache
+  request: QuizRequest
 }
 
 const isQuizCall = (input: unknown) => {
@@ -42,13 +44,19 @@ async function tellClaude($: EngineInterface, text: string) {
   await $.session.append({ message: { type: 'user', content: [{ type: 'text', text }] } })
 }
 
+// Whether the mod checks a quiz call: always for one the user asked for or a
+// later round of one in progress; otherwise while quizzes are on.
+async function checksQuiz($: EngineInterface, { request, rounds }: QuizFlowDeps) {
+  return request.requested !== undefined || rounds.count !== undefined || isQuizEnabled($)
+}
+
 // Before a quiz round runs: check its length and, before the first round,
-// ask the user whether they want the quiz. Returns the refusal, or the count
-// the quiz keeps to.
+// ask the user whether they want the quiz, unless they asked for it. Returns
+// the refusal, or the count the quiz keeps to.
 async function gateQuiz(
   $: EngineInterface,
   input: unknown,
-  { changes, rounds }: QuizFlowDeps,
+  { changes, rounds, request }: QuizFlowDeps,
 ): Promise<{ deny: string } | { count: QuestionCount }> {
   const asked = questionsIn(input)
   const askedBefore = rounds.askedSoFar
@@ -59,9 +67,11 @@ async function gateQuiz(
       ? { count: inProgress }
       : { deny: wrongLengthReply(inProgress, asked, askedBefore) }
   }
-  const count = questionCountFor(await readSettings($), changes.owed)
+  const requested = request.requested
+  const count = questionCountFor(await readSettings($), requested ?? changes.owed)
   // A quiz of the wrong length goes back to Claude before the user sees it.
   if (!fitsQuestionCount(count, asked)) return { deny: wrongLengthReply(count, asked) }
+  if (requested !== undefined) return { count }
   if (await askToStartQuiz($, [...changes.owed.keys()], knownQuizLength(count, asked) ?? 0)) return { count }
   changes.forget()
   return { deny: skippedReply }
@@ -83,11 +93,12 @@ async function recordEdit($: EngineInterface, input: unknown, { changes, reminde
 }
 
 export function registerQuizFlow(on: On, deps: QuizFlowDeps) {
-  const { changes, reminders, rounds, ownDialogs } = deps
+  const { changes, reminders, rounds, ownDialogs, request } = deps
   on('turn.start', async ($, e, next) => {
     if (e.agentId === undefined) {
       reminders.startTurn()
       rounds.end()
+      request.startTurn()
     }
     return next(e)
   })
@@ -95,13 +106,15 @@ export function registerQuizFlow(on: On, deps: QuizFlowDeps) {
   on('tool.call', async ($, e, next) => {
     const isMainLoop = e.agentId === undefined
     let quiz: QuestionCount | undefined
-    if (isMainLoop && isQuizCall(e) && (await isQuizEnabled($))) {
+    if (isMainLoop && isQuizCall(e) && (await checksQuiz($, deps))) {
       const gated = await gateQuiz($, e, deps)
       if ('deny' in gated) return gated
       quiz = gated.count
     }
 
     const ran = await next(e)
+    // Asked or dismissed, a requested quiz is over; later rounds keep its count.
+    if (quiz !== undefined) request.close()
     if (ran.deny !== undefined || ran.isError === true) {
       // A dismissed round ends the quiz.
       if (quiz !== undefined) rounds.end()

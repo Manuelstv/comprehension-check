@@ -2,6 +2,7 @@
 
 import { expect, test } from 'claude-code/testing'
 
+import { largestFirst, mergeChanges, withoutLockFiles } from '../hooks/changes/changeSets'
 import { ChangeTracker, totalLines } from '../hooks/changes/changeTracker'
 import { editedPath, linesChangedBy } from '../hooks/changes/edits'
 import { isLockFile } from '../hooks/changes/ignoredFiles'
@@ -14,10 +15,15 @@ import {
   questionCountFor,
   questionsForSize,
 } from '../hooks/quiz/questionCount'
-import { LENSES, QUIZ_GOAL, quizInstructions } from '../hooks/quiz/prompts'
+import { LENSES, QUIZ_GOAL, quizInstructions, requestedQuizNote } from '../hooks/quiz/prompts'
+import { QuizRequest } from '../hooks/quiz/quizRequest'
 import { QuizRounds } from '../hooks/quiz/quizRounds'
 import { TurnReminders } from '../hooks/quiz/turnReminders'
 import { parseResults, scoreOf, tierFor } from '../hooks/scorecard/grading'
+import type { ScopeSnapshot } from '../hooks/scopes/collectScope'
+import { parseLog, parseNumstat, parseNumstatRow, parsePathList } from '../hooks/scopes/gitOutput'
+import { requestSummary, subjectOf } from '../hooks/scopes/scopeText'
+import { SCOPES_USAGE, describeScope, parseScope } from '../hooks/scopes/scopes'
 import { SETTING_DEFINITIONS } from '../hooks/settings/definitions'
 import { SETTINGS_USAGE } from '../hooks/settings/settings'
 import { fileListLine, fitRows } from '../hooks/ui/bannerLines'
@@ -213,4 +219,129 @@ test('settings: ←/→ steps each value, the max within 1-99', async () => {
 test('a stable pick: the same seed, the same line', async () => {
   const pool = ['a', 'b', 'c']
   expect(pickStable(pool, 'seed')).toBe(pickStable(pool, 'seed'))
+})
+
+// ─── On-demand quizzes ───────────────────────────────────────────────────────
+
+test('scopes: last [n], uncommitted and codebase, with their aliases', async () => {
+  expect(parseScope('last', [])).toEqual({ scope: { kind: 'commits', count: 1 } })
+  expect(parseScope('last', ['5'])).toEqual({ scope: { kind: 'commits', count: 5 } })
+  expect(parseScope('commits', ['100'])).toEqual({ scope: { kind: 'commits', count: 100 } })
+  expect(parseScope('diff', [])).toEqual({ scope: { kind: 'uncommitted' } })
+  expect(parseScope('all', [])).toEqual({ scope: { kind: 'codebase' } })
+  for (const bad of ['0', '101', '2.5', 'many']) expect(parseScope('last', [bad])).toHaveProperty('error')
+  expect(parseScope('stats', [])).toBeUndefined()
+
+  expect(describeScope({ kind: 'commits', count: 1 })).toBe('the last commit')
+  expect(describeScope({ kind: 'commits', count: 3 })).toBe('the last 3 commits')
+  expect(SCOPES_USAGE).toBe('/quiz last [1-100], /quiz uncommitted, /quiz codebase')
+})
+
+test('git output: numstat rows, binaries skipped, a log split into commits and lines', async () => {
+  expect(parseNumstatRow('3\t2\tsrc/a b.ts')).toEqual({ path: 'src/a b.ts', lines: 5 })
+  expect(parseNumstatRow('-\t-\tlogo.png')).toBeUndefined()
+  expect(parseNumstatRow('')).toBeUndefined()
+
+  expect([...parseNumstat('1\t1\ta.ts\n-\t-\tb.png\n4\t0\tc.ts\n')]).toEqual([
+    ['a.ts', 2],
+    ['c.ts', 4],
+  ])
+
+  const log = parseLog('@\tabc1234\tfix: a\tb\n\n2\t1\ta.ts\n@\tdef5678\tfeat: c\n\n4\t0\ta.ts\n1\t0\tc.ts\n')
+  expect(log.commits).toEqual([
+    { hash: 'abc1234', subject: 'fix: a\tb' },
+    { hash: 'def5678', subject: 'feat: c' },
+  ])
+  expect([...log.changes]).toEqual([
+    ['a.ts', 7],
+    ['c.ts', 1],
+  ])
+  expect(parsePathList('new.ts\0dir/x y.md\0')).toEqual(['new.ts', 'dir/x y.md'])
+})
+
+test('change sets: merged per path, lock files dropped, largest first', async () => {
+  const merged = mergeChanges(new Map([['a.ts', 2]]), new Map([['a.ts', 3], ['pnpm-lock.yaml', 900], ['b.ts', 5]]))
+  expect(merged.get('a.ts')).toBe(5)
+  const kept = withoutLockFiles(merged)
+  expect(kept.has('pnpm-lock.yaml')).toBe(false)
+  expect(largestFirst(kept)).toEqual([
+    ['a.ts', 5],
+    ['b.ts', 5],
+  ])
+})
+
+test('quiz request: queued, submitted once, kept for its own turn, dropped by the next', async () => {
+  const request = new QuizRequest()
+  const changes = new Map([['a.ts', 10]])
+  request.open(changes, 'Quiz me.')
+  // A turn starting before the prompt went in does not count as its turn.
+  request.startTurn()
+  expect(request.takePrompt()).toBe('Quiz me.')
+  expect(request.takePrompt()).toBeUndefined()
+  request.startTurn()
+  expect(request.requested).toBe(changes)
+  request.startTurn()
+  expect(request.requested).toBeUndefined()
+
+  request.open(changes, 'Quiz me.')
+  request.close()
+  expect(request.takePrompt()).toBeUndefined()
+  expect(request.requested).toBeUndefined()
+})
+
+const snapshot = (over: Partial<ScopeSnapshot> = {}): ScopeSnapshot => ({
+  scope: { kind: 'commits', count: 2 },
+  changes: new Map([
+    ['src/a.ts', 120],
+    ['src/b.ts', 1],
+  ]),
+  commits: [
+    { hash: 'abc1234', subject: 'fix: a' },
+    { hash: 'def5678', subject: 'feat: b' },
+  ],
+  untracked: [],
+  ...over,
+})
+
+test('scope text: commits named, how to read them, files largest first', async () => {
+  const subject = subjectOf(snapshot())
+  expect(subject.what).toBe('the last 2 commits (abc1234 fix: a; def5678 feat: b)')
+  expect(subject.howToRead).toContain('git show --no-renames abc1234 def5678')
+  expect(subject.fileLines).toEqual(['src/a.ts (120 lines)', 'src/b.ts (1 line)'])
+  expect(subject).toMatchObject({ files: 2, lines: 121, moreFiles: 0, isWholeCode: false })
+
+  const wip = subjectOf(snapshot({ scope: { kind: 'uncommitted' }, commits: [], untracked: ['src/b.ts'] }))
+  expect(wip.fileLines[1]).toBe('src/b.ts (1 line, new)')
+  expect(wip.howToRead).toContain('git diff HEAD')
+
+  const many = new Map(Array.from({ length: 35 }, (_, i) => [`f${i}.ts`, i + 1] as [string, number]))
+  const whole = subjectOf(snapshot({ scope: { kind: 'codebase' }, changes: many, commits: [] }))
+  expect(whole.fileLines.length).toBe(30)
+  expect(whole.fileLines[0]).toBe('f34.ts (35 lines)')
+  expect(whole.moreFiles).toBe(5)
+  expect(whole.isWholeCode).toBe(true)
+})
+
+test('scope text: the summary follows the length setting and the perspective', async () => {
+  const settings = { sound: true, maxQuestions: 3, sizing: 'agent' as const, perspective: 'product' as const }
+  expect(requestSummary(snapshot(), { mode: 'agent', max: 3 }, settings)).toBe(
+    '🧠 Quiz on the last 2 commits: 2 files, 121 lines · up to 3 questions · Product perspective.',
+  )
+  const sized = { mode: 'size' as const, exact: 2, files: 2, lines: 121 }
+  expect(requestSummary(snapshot(), sized, { ...settings, sizing: 'size' })).toContain('· 2 questions ·')
+})
+
+test('requested quiz note: the scope, how to read it, then the quiz rules without the yes/no step', async () => {
+  const note = requestedQuizNote(subjectOf(snapshot()), { mode: 'agent', max: 4 }, 'code')
+  expect(note).toContain('[comprehension-check] The user asked to be quizzed on the last 2 commits')
+  expect(note).toContain('- src/a.ts (120 lines)')
+  expect(note).toContain('"the change" means this diff')
+  expect(note).toContain('The user asked for this quiz, so it goes straight to them')
+  expect(note).not.toContain('first asks the user whether they want the quiz')
+  expect(note).toContain('Perspective: Code')
+
+  const whole = requestedQuizNote(subjectOf(snapshot({ scope: { kind: 'codebase' }, commits: [] })), { mode: 'agent', max: 4 }, 'mixed')
+  expect(whole).toContain('not on a recent change')
+  // The gated quiz still reads as before, so the evals stay in step.
+  expect(quizInstructions({ mode: 'agent', max: 4 }, 'mixed')).toContain('first asks the user whether they want the quiz')
 })
