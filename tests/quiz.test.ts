@@ -377,7 +377,7 @@ test('settings are set by words and shown when the dialog is dismissed', async (
 
 test('the settings dialog saves what the user picks', async ($, on) => {
   engine(on, 'Yes, quiz me', {
-    settings: ['Sound: on', 'Off', 'Max questions: 4', '2', 'Count: Claude decides', 'By change size', 'Done'],
+    settings: ['Sound: On', 'Off', 'Max questions: 4', '2', 'Count: Claude decides', 'By change size', 'Done'],
   })
   await $.session.start(START)
 
@@ -387,7 +387,7 @@ test('the settings dialog saves what the user picks', async ($, on) => {
 })
 
 test('the settings dialog does not count as a quiz', async ($, on) => {
-  engine(on, 'Yes, quiz me', { settings: ['Sound: on', 'On', 'Done'] })
+  engine(on, 'Yes, quiz me', { settings: ['Sound: On', 'On', 'Done'] })
   await $.session.start(START)
 
   await $.tool.call({ ...EDIT, file_path: '/repo/settings-owed.kt' })

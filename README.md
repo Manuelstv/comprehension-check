@@ -169,9 +169,9 @@ Ignored files are the ones `git check-ignore` reports. Outside a git repo, or wh
 
 ## How it works
 
-The mod is a single hooks module, [`hooks/register.tsx`](hooks/register.tsx):
+The hooks module's entry point is [`hooks/register.tsx`](hooks/register.tsx). It creates the shared parts once and hands them to each feature:
 
-1. **`tool.call`** watches for successful `Edit`, `Write` and `NotebookEdit` calls, including those made by subagents, and records each changed path with its line count. Lock files and git-ignored files are skipped.
+1. **`tool.call`** (`quiz/quizFlow.ts`) watches for successful `Edit`, `Write` and `NotebookEdit` calls, including those made by subagents, and records each changed path with its line count. Lock files and git-ignored files are skipped.
 2. On the first edit of a turn it adds a hidden note to the conversation. The note tells Claude to finish the task and then run the quiz.
 3. **`classic.Stop`** is the fallback. If Claude tries to end a turn that changed files and has not asked a quiz yet, the hook sends it back once with the list of changed files.
 4. Claude marks its quiz with `metadata.source: "comprehension-check"`. The mod intercepts that `AskUserQuestion` call and first asks you
@@ -180,7 +180,29 @@ The mod is a single hooks module, [`hooks/register.tsx`](hooks/register.tsx):
 6. After grading, Claude calls the mod's own tool, `mcp__comprehension-check__quiz_results`, with structured verdicts and punchlines.
    The mod computes the score, updates your stats and plays the effects. **`ui.render` on `ToolUse`** then draws that call as the scorecard.
    The tool never needs your permission, because the mod allows it in a `tool.check` hook.
-7. The on/off switch, the settings and your stats are kept in the mod's persistent store (`$.store`). Animation state is session state (`$.state`, typed in [`types/index.d.ts`](types/index.d.ts)).
+7. The on/off switch, the settings (`settings/settings.ts`) and your stats are kept in the mod's persistent store (`$.store`). Animation state is session state (`$.state`, typed in [`types/index.d.ts`](types/index.d.ts)).
+
+### Code layout
+
+| Path | What it does |
+| --- | --- |
+| [`hooks/config.ts`](hooks/config.ts) | Every tunable: names, question limits, size steps, lock files, score tiers, timings, update commands |
+| `hooks/register.tsx` | The entry point. It creates the change tracker and other shared parts and registers each feature. |
+| `hooks/quiz/` | When to quiz: edits, reminders to Claude, the Yes / Not now gate, the Stop fallback, the question count and the prompts |
+| `hooks/changes/` | What changed: paths and line counts of edits, lock and git-ignored files, and the files owed a quiz |
+| `hooks/settings/` | The settings, defined once as a table, and the settings menu |
+| `hooks/scorecard/` | The results tool, grading, score tiers, stats and the scorecard drawing |
+| `hooks/ui/` | The banners above the question dialogs |
+| `hooks/update/` | `/quiz version` and `/quiz update` |
+| `hooks/commands/` | The `/quiz` command |
+| `hooks/lib/` | Small helpers with no mod logic: semver, text and safe value reads |
+
+To add a setting, add one entry to `SETTING_DEFINITIONS` in `hooks/settings/settings.ts`. The command line, the menu and the summary all pick it up.
+
+Two rules of the mod loader shape the code:
+
+- **`$` is passed only to function declarations** that are declared at the top level of a file. So every function that takes `$` is `function name($, …)`, not an arrow function, and `/quiz` dispatches with a `switch`.
+- **Each state atom lives in the file that reads or writes it**, with its plugin and key spelled as literals. So `quiz/gateState.ts` and `scorecard/scorecardState.ts` own the session state and expose functions to read and write it.
 
 ## Updating
 
@@ -230,7 +252,7 @@ Requires [Claude Code](https://docs.claude.com/en/docs/claude-code) 2.1 or later
 
 ```
 claude plugin validate .        # manifest, marketplace file and hooks module
-claude plugin test .            # tests/*.test.ts
+claude plugin test .            # tests/*.test.ts: quiz.test.ts drives the hooks, units.test.ts the pure parts
 claude --plugin-dir .           # a session with the mod loaded from this folder
 scripts/check-version.sh        # is the version bumped for what changed vs origin/main?
 ```

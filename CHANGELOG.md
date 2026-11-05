@@ -16,6 +16,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Lock files (`pnpm-lock.yaml`, `Cargo.lock`, `*.lock`, …) and git-ignored files no longer count as changes, so editing only those no longer triggers a quiz.
 - With Claude deciding, a quiz longer than your max goes back to Claude before you see it.
 - `/quiz sound on|off` still works, and is now also available as `/quiz settings sound on|off`.
+- The hooks module is split into feature modules (`quiz/`, `changes/`, `settings/`, `scorecard/`, `ui/`, `update/`, `commands/`), with every tunable in `hooks/config.ts`. Unit tests cover the pure parts.
 
 ## [0.3.0] - 2026-11-05
 
