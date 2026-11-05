@@ -2,7 +2,7 @@
 // words that describe it. The command line, the settings menu and the summary
 // all read this table; adding a setting means adding an entry.
 
-import { DEFAULT_SETTINGS, LINES_PER_QUESTION, PERSPECTIVES, QUESTION_LIMITS, STORE_KEYS, WORDINGS } from '../config'
+import { DEFAULT_SETTINGS, LINES_PER_QUESTION, PERSPECTIVES, QUESTION_LIMITS, SETTINGS_MENU, STORE_KEYS, WORDINGS } from '../config'
 import type { Perspective, Sizing, Wording } from '../config'
 
 export type Settings = {
@@ -24,6 +24,8 @@ export type SettingDefinition<V = SettingValue> = {
   names: readonly string[]
   // The values the command line takes, as the usage line shows them.
   usage: string
+  // The words the autocomplete offers after the setting's name.
+  values: readonly string[]
   // The setting's name in the settings menu.
   title: string
   defaultValue: V
@@ -58,6 +60,7 @@ const sound: SettingDefinition<boolean> = {
   storeKey: STORE_KEYS.sound,
   names: ['sound'],
   usage: 'on|off',
+  values: ['on', 'off'],
   title: 'Sound',
   defaultValue: DEFAULT_SETTINGS.sound,
   label: value => (value ? 'On' : 'Off'),
@@ -74,6 +77,7 @@ const maxQuestions: SettingDefinition<number> = {
   storeKey: STORE_KEYS.maxQuestions,
   names: ['max', 'questions'],
   usage: `${QUESTION_LIMITS.min}-${QUESTION_LIMITS.max}`,
+  values: SETTINGS_MENU.maxPresets.map(String),
   title: 'Max questions',
   defaultValue: DEFAULT_SETTINGS.maxQuestions,
   label: value => String(value),
@@ -102,6 +106,7 @@ const sizing: SettingDefinition<Sizing> = {
   // `count` is the name it had before.
   names: ['length', 'count'],
   usage: 'claude|size',
+  values: ['claude', 'size'],
   title: 'Length',
   defaultValue: DEFAULT_SETTINGS.sizing,
   label: value => (value === 'agent' ? 'Claude decides' : 'Fits change size'),
@@ -141,6 +146,7 @@ const perspective: SettingDefinition<Perspective> = {
   storeKey: STORE_KEYS.perspective,
   names: ['perspective', 'lens', 'view'],
   usage: 'mixed|code|architect|product',
+  values: PERSPECTIVES,
   title: 'Perspective',
   defaultValue: DEFAULT_SETTINGS.perspective,
   choices: PERSPECTIVES,
@@ -174,6 +180,7 @@ const wording: SettingDefinition<Wording> = {
   storeKey: STORE_KEYS.wording,
   names: ['wording', 'words', 'language'],
   usage: 'plain|standard',
+  values: WORDINGS,
   title: 'Wording',
   defaultValue: DEFAULT_SETTINGS.wording,
   label: value => WORDING_TEXT[value].label,

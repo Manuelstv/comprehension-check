@@ -27,6 +27,8 @@ type ScopeDefinition = {
   names: readonly string[]
   // What follows the name in the usage line.
   usage: string
+  // One line on what it quizzes, for the command's autocomplete.
+  summary: string
   // A scope from the words after its name.
   parse(args: readonly string[]): ParsedScope
 }
@@ -39,6 +41,7 @@ const commits: ScopeDefinition = {
   kind: 'commits',
   names: ['last', 'commits', 'commit'],
   usage: ` [1-${maxCommits}]`,
+  summary: `Quiz on the last commit, or the last n (1-${maxCommits})`,
   parse: ([word]) => {
     if (word === undefined) return { scope: { kind: 'commits', count: 1 } }
     const count = /^\d+$/.test(word) ? Number(word) : NaN
@@ -52,6 +55,7 @@ const uncommitted: ScopeDefinition = {
   kind: 'uncommitted',
   names: ['uncommitted', 'changes', 'diff', 'wip'],
   usage: '',
+  summary: 'Quiz on your staged, unstaged and new files',
   parse: () => ({ scope: { kind: 'uncommitted' } }),
 }
 
@@ -59,6 +63,7 @@ const codebase: ScopeDefinition = {
   kind: 'codebase',
   names: ['codebase', 'all', 'repo', 'project'],
   usage: '',
+  summary: 'Quiz on the whole codebase as it stands',
   parse: () => ({ scope: { kind: 'codebase' } }),
 }
 

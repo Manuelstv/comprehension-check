@@ -4,6 +4,9 @@ import { expect, test } from 'claude-code/testing'
 
 import { largestFirst, mergeChanges, withoutLockFiles } from '../hooks/changes/changeSets'
 import { ChangeTracker, totalLines } from '../hooks/changes/changeTracker'
+import { commitCountChoices, menuChoices } from '../hooks/commands/commandMenu'
+import { argsBefore, quizCompletions } from '../hooks/commands/completions'
+import { SUBCOMMAND_HELP } from '../hooks/commands/subcommands'
 import { editedPath, linesChangedBy } from '../hooks/changes/edits'
 import { isLockFile } from '../hooks/changes/ignoredFiles'
 import { isNewerVersion, versionInManifest } from '../hooks/lib/semver'
@@ -26,7 +29,7 @@ import { requestSummary, subjectOf } from '../hooks/scopes/scopeText'
 import { SCOPES_USAGE, describeScope, parseScope } from '../hooks/scopes/scopes'
 import { SETTING_DEFINITIONS } from '../hooks/settings/definitions'
 import { SETTINGS_USAGE } from '../hooks/settings/settings'
-import { menuPages, pageRow } from '../hooks/settings/settingsMenu'
+import { menuPages, pageRow } from '../hooks/ui/menuPages'
 import { fileListLine, fitRows } from '../hooks/ui/bannerLines'
 
 test('semver: later versions are newer, a pre-release is below its release', async () => {
@@ -384,8 +387,74 @@ test('settings menu pages: one page when the settings fit a dialog, else 3 a pag
   expect(menuPages([1, 2, 3, 4])).toEqual([[1, 2, 3, 4]])
   expect(menuPages([1, 2, 3, 4, 5])).toEqual([[1, 2, 3], [4, 5]])
   expect(menuPages([1, 2, 3, 4, 5, 6, 7])).toEqual([[1, 2, 3], [4, 5, 6], [7]])
-  expect(pageRow(0, 1)).toBeUndefined()
-  expect(pageRow(0, 2)).toBe('More settings…')
-  expect(pageRow(1, 2)).toBe('Back')
-  expect(pageRow(1, 3)).toBe('More settings…')
+  const rows = { more: 'More…', back: 'Back' }
+  expect(pageRow(0, 1, rows)).toBeUndefined()
+  expect(pageRow(0, 2, rows)).toBe('More…')
+  expect(pageRow(1, 2, rows)).toBe('Back')
+  expect(pageRow(1, 3, rows)).toBe('More…')
+})
+
+// ─── /quiz autocomplete ──────────────────────────────────────────────────────
+
+// The box as the person left it, the cursor at the end.
+const typing = (text: string) => {
+  const start = text.search(/\S+$/)
+  return { text, start, token: text.slice(start) }
+}
+const texts = (rows: { text: string }[]) => rows.map(row => row.text)
+
+test('autocomplete: /quiz alone lists every subcommand, written out, with what it does', async () => {
+  const rows = quizCompletions(typing('/quiz'))
+  expect(texts(rows)).toEqual(SUBCOMMAND_HELP.map(sub => `/quiz ${sub.name}`))
+  expect(rows[0]).toEqual({
+    text: '/quiz last',
+    label: '/quiz last [1-100]',
+    description: 'Quiz on the last commit, or the last n (1-100)',
+  })
+  expect(rows.find(row => row.text === '/quiz uncommitted')?.description).toBe('Quiz on your staged, unstaged and new files')
+})
+
+test('autocomplete: a partly typed subcommand completes; a full one offers nothing more', async () => {
+  expect(texts(quizCompletions(typing('/quiz unc')))).toEqual(['uncommitted'])
+  expect(texts(quizCompletions(typing('/quiz UNC')))).toEqual(['uncommitted'])
+  expect(texts(quizCompletions(typing('/quiz s')))).toEqual(['settings', 'stats', 'status'])
+  expect(texts(quizCompletions(typing('/quiz o')))).toEqual(['on', 'off'])
+  expect(quizCompletions(typing('/quiz uncommitted'))).toEqual([])
+  expect(quizCompletions(typing('/quiz zzz'))).toEqual([])
+})
+
+test('autocomplete: settings and their values, with the current one shown', async () => {
+  const settings = { ...SETTINGS, perspective: 'code' as const }
+  const names = quizCompletions(typing('/quiz settings p'), settings)
+  expect(names).toEqual([
+    { text: 'perspective', label: 'perspective mixed|code|architect|product', description: 'Perspective: now Code' },
+  ])
+  expect(texts(quizCompletions(typing('/quiz settings w')))).toEqual(['wording'])
+
+  const values = quizCompletions(typing('/quiz settings perspective c'), settings)
+  expect(texts(values)).toEqual(['code'])
+  expect(values[0]?.description).toContain('(current)')
+  expect(texts(quizCompletions(typing('/quiz settings max 1')))).toEqual([])
+  expect(texts(quizCompletions(typing('/quiz settings wording s')))).toEqual(['standard'])
+  // An alias of the setting finds its values too.
+  expect(texts(quizCompletions(typing('/quiz settings lens a')))).toEqual(['architecture'])
+})
+
+test('autocomplete: nothing for other commands, other words, or past the last level', async () => {
+  expect(argsBefore('/quizzes unc', 9)).toBeUndefined()
+  expect(quizCompletions(typing('/review unc'))).toEqual([])
+  expect(quizCompletions(typing('please quiz unc'))).toEqual([])
+  expect(quizCompletions(typing('/quiz last 3'))).toEqual([])
+  expect(quizCompletions(typing('/quiz settings sound on o'))).toEqual([])
+})
+
+// ─── /quiz menu ──────────────────────────────────────────────────────────────
+
+test('menu rows: every subcommand but status, one switch for the automatic quizzes', async () => {
+  const on = menuChoices(true).map(c => c.value)
+  expect(on).toEqual(['last', 'uncommitted', 'codebase', 'settings', 'stats', 'off', 'version', 'update'])
+  expect(menuChoices(false).map(c => c.value)).toContain('on')
+  expect(menuChoices(false).map(c => c.value)).not.toContain('off')
+  for (const choice of menuChoices(true)) expect(choice.description.length).toBeGreaterThan(10)
+  expect(commitCountChoices().map(c => c.value)).toEqual(['last 1', 'last 3', 'last 5', 'last 10'])
 })

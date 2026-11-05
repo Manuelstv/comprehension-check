@@ -147,6 +147,24 @@ Claude makes no edits during the quiz. If one of your answers shows a real bug, 
 
 ### Commands
 
+**Run `/quiz` on its own** for a menu of every command, each with what it does. Pick one with ↑ ↓ and Enter; it runs as if you had
+typed it. **More commands…** shows the next page (a dialog holds 4 options), and **last** then asks how many commits: 1, 3, 5 or 10,
+or type a number. You can also type any command under **Other**, such as `last 5`. Esc closes the menu and shows the status.
+
+```text
+ ☐ Quiz
+ Quizzes after Claude's edits are on. Pick a command, or type one under Other (like "last 5").
+❯ 1. last — Quiz on the last commit, or the last n (1-100)
+  2. uncommitted — Quiz on your staged, unstaged and new files
+  3. codebase — Quiz on the whole codebase as it stands
+  4. More commands…
+```
+
+**While typing**, the prompt box completes the command too. Typing `/quiz` lists every command with what it does, to pick with
+↑ ↓ and Tab, and Tab finishes a word you have started: `/quiz unc` becomes `/quiz uncommitted`, `/quiz settings p` becomes
+`/quiz settings perspective`, and the next word lists the values, the current one marked. Right after a space nothing is listed
+(the engine asks plugins only about a word being typed); type the first letter.
+
 | Command | Effect |
 | --- | --- |
 | `/quiz last [n]` | Quiz you now on the last commit, or the last `n` commits (1–100) |
@@ -154,7 +172,8 @@ Claude makes no edits during the quiz. If one of your answers shows a real bug, 
 | `/quiz codebase` | Quiz you now on the whole codebase as it stands. `all`, `repo` and `project` work too. |
 | `/quiz on` | Turn quizzes on (the default) |
 | `/quiz off` | Turn the automatic quizzes after Claude's edits off. The quizzes you ask for still run. The setting persists across sessions. |
-| `/quiz status` (or `/quiz`) | Show whether quizzes are on |
+| `/quiz` | Open the menu of every command, each with what it does |
+| `/quiz status` | Show whether quizzes are on |
 | `/quiz stats` | Show your record: quizzes, average, best score and streak |
 | `/quiz settings` | Open the settings menu: sound, max questions, quiz length and perspective |
 | `/quiz settings sound on\|off` | Turn the scorecard sounds on (the default) or off. `/quiz sound on\|off` still works. |
@@ -248,9 +267,9 @@ The hooks module's entry point is [`hooks/register.tsx`](hooks/register.tsx). It
 | `hooks/changes/` | What changed: paths and line counts of edits, lock and git-ignored files, and the files owed a quiz |
 | `hooks/settings/` | The settings, defined once as a table (`definitions.ts`), the store (`settings.ts`) and the settings menu (`settingsMenu.ts`) |
 | `hooks/scorecard/` | The results tool, grading, score tiers, stats and the scorecard drawing |
-| `hooks/ui/` | The banners above the question dialogs |
+| `hooks/ui/` | The banners above the question dialogs, and the paged pick-list both menus use (`pickList.ts`, `menuPages.ts`) |
 | `hooks/update/` | `/quiz version` and `/quiz update` |
-| `hooks/commands/` | The `/quiz` command |
+| `hooks/commands/` | The `/quiz` command, its subcommand table (`subcommands.ts`), its menu (`commandMenu.ts`) and its autocomplete (`completions.ts`) |
 | `hooks/lib/` | Small helpers with no mod logic: semver, text, timers and safe value reads |
 | [`evals/`](evals/README.md) | Model evals of the quiz prompt, run with `claude plugin eval` |
 | `scripts/build-evals.ts` | Writes the eval prompts that embed the quiz text, so they never drift from `hooks/quiz/prompts.ts` |

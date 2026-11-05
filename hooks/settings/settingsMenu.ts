@@ -11,6 +11,8 @@
 import type { EngineInterface } from 'claude-code'
 
 import { QUESTION_LIMITS, SETTINGS_MENU } from '../config'
+import { menuPages, pageRow } from '../ui/menuPages'
+import { askOrDismiss } from '../ui/pickList'
 import type { OwnDialogs } from '../quiz/ownDialogs'
 import { SETTING_DEFINITIONS, findSetting } from './definitions'
 import type { SettingDefinition, SettingValue, Settings } from './definitions'
@@ -18,30 +20,6 @@ import { SETTINGS_USAGE, readSettings, saveValue, summaryOf } from './settings'
 
 type MenuHost = Pick<EngineInterface, 'store' | 'ui'>
 
-// The label picked or the text typed, or undefined when the dialog was dismissed.
-async function askOrDismiss($: MenuHost, question: string, header: string, options: string[]) {
-  try {
-    return (await $.ui.ask(question, { header, options })).trim()
-  } catch {
-    return undefined
-  }
-}
-
-// The settings on each page: all of them when they fit one dialog, else
-// pages of `perDialog - 1`, leaving a row to move between pages.
-export const menuPages = <T>(items: readonly T[], perDialog: number = QUESTION_LIMITS.perDialog): T[][] => {
-  if (items.length <= perDialog) return [[...items]]
-  const pages: T[][] = []
-  for (let at = 0; at < items.length; at += perDialog - 1) pages.push(items.slice(at, at + perDialog - 1))
-  return pages
-}
-
-// The row that moves on from `page`: none on a single page, "Back" on the
-// last, "More settings…" before it.
-export const pageRow = (page: number, pageCount: number): string | undefined => {
-  if (pageCount <= 1) return undefined
-  return page === pageCount - 1 ? SETTINGS_MENU.backRow : SETTINGS_MENU.moreRow
-}
 
 const rowLabel = (def: SettingDefinition, settings: Settings) => `${def.title}: ${def.label(settings[def.key])}`
 
@@ -79,7 +57,7 @@ export async function openSettingsMenu($: MenuHost, ownDialogs: OwnDialogs): Pro
     for (let round = 0; round < SETTINGS_MENU.maxRounds; round += 1) {
       const settings = await readSettings($)
       const rows = (pages[page] ?? []).map(def => ({ def, label: rowLabel(def, settings) }))
-      const turnPage = pageRow(page, pages.length)
+      const turnPage = pageRow(page, pages.length, { more: SETTINGS_MENU.moreRow, back: SETTINGS_MENU.backRow })
       const picked = await askOrDismiss(
         $,
         menuQuestion(settings),

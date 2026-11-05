@@ -8,13 +8,14 @@
 //   scorecard/   the results tool, grading, stats and the scorecard drawing
 //   ui/          the banners above the question dialogs
 //   update/      /quiz version and /quiz update
-//   commands/    the /quiz command
+//   commands/    the /quiz command and its autocomplete
 //   config.ts    every tunable value
 
 import type { Register } from 'claude-code'
 
 import { ChangeTracker } from './changes/changeTracker'
 import { IgnoredFileCache } from './changes/ignoredFiles'
+import { registerQuizCompletions } from './commands/completions'
 import { defineQuizCommand, registerQuizCommand } from './commands/quizCommand'
 import { createOwnDialogs } from './quiz/ownDialogs'
 import { registerQuizFlow } from './quiz/quizFlow'
@@ -38,6 +39,7 @@ export const register: Register = on => {
   })
 
   registerQuizCommand(on, { changes, ownDialogs, request })
+  registerQuizCompletions(on)
   registerResultsTool(on, rounds)
   registerQuizFlow(on, {
     changes,

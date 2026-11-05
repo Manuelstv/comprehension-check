@@ -142,6 +142,18 @@ export const SETTINGS_MENU = {
   maxRounds: 12,
 } as const
 
+// The menu plain `/quiz` opens: the subcommands, each with what it does, in
+// pages of a dialog's 4 options. Text typed under Other runs as a subcommand.
+export const COMMAND_MENU = {
+  header: 'Quiz',
+  moreRow: 'More commands…',
+  backRow: 'Back',
+  // The commit counts offered after "last"; any other can be typed.
+  commitCounts: [1, 3, 5, 10],
+  // Rounds of the menu (page turns) before it closes by itself.
+  maxRounds: 12,
+} as const
+
 // Rows the terminal leaves the banner above a question dialog, and the width
 // it counts one row at.
 export const DIALOG_LAYOUT = { rows: 12, rowColumns: 40 } as const

@@ -1,6 +1,7 @@
 // The `/quiz` command: one function per subcommand, picked by `runSubcommand`.
 // A scope (`last`, `uncommitted`, `codebase`; see scopes/scopes.ts) starts a
-// quiz on it. Anything else (or nothing) shows the status.
+// quiz on it. Plain `/quiz` opens a menu of them all (commandMenu.ts); closed,
+// or where no dialog can show, it gives the status, as anything unknown does.
 //
 // The mod loader follows `$` only into function declarations, so subcommands
 // are declared functions dispatched by a switch, not a table of closures.
@@ -14,22 +15,23 @@ import { SETTINGS_USAGE, isQuizEnabled, readSettings, saveSettingFromWords, setQ
 import type { OwnDialogs } from '../quiz/ownDialogs'
 import type { QuizRequest } from '../quiz/quizRequest'
 import { requestQuiz } from '../scopes/requestQuiz'
-import { SCOPES_USAGE, SCOPE_DEFINITIONS, parseScope } from '../scopes/scopes'
+import { SCOPES_USAGE, parseScope } from '../scopes/scopes'
 import { openSettingsMenu } from '../settings/settingsMenu'
 import { runSelfUpdate, versionReport } from '../update/selfUpdate'
+import { openCommandMenu } from './commandMenu'
+import { SUBCOMMAND_NAMES } from './subcommands'
 
 export type QuizCommandDeps = { changes: ChangeTracker; ownDialogs: OwnDialogs; request: QuizRequest }
 
-// Shown in the command picker and in the status reply.
-const SCOPE_NAMES = SCOPE_DEFINITIONS.map(def => def.names[0] as string)
-const SUBCOMMANDS = [...SCOPE_NAMES, 'on', 'off', 'status', 'stats', 'settings', 'version', 'update'] as const
+// Shown in the status reply.
 const STATUS_HINTS = ['on|off', 'stats', 'settings', 'version', 'update'] as const
 
 export async function defineQuizCommand($: EngineInterface) {
   await $.command.register({
     name: COMMAND_NAME,
-    description: `Comprehension quiz after code changes: ${SUBCOMMANDS.join(' | ')}`,
-    argumentHint: SUBCOMMANDS.join('|'),
+    // The subcommands, each with what it does, are the autocomplete's rows.
+    description: 'Comprehension quiz: ask for one now, change settings, see stats',
+    argumentHint: SUBCOMMAND_NAMES.join('|'),
   })
 }
 
@@ -67,6 +69,13 @@ async function showStatus($: EngineInterface) {
   return `Comprehension quiz is ${(await isQuizEnabled($)) ? 'on' : 'off'}. Use ${usage}. Quiz on demand: ${SCOPES_USAGE}.`
 }
 
+// `/quiz` on its own: the menu, then whatever was picked in it.
+async function runFromMenu($: EngineInterface, deps: QuizCommandDeps): Promise<CommandRunResult> {
+  const picked = await openCommandMenu($, deps.ownDialogs, await isQuizEnabled($))
+  if (picked === undefined || picked.trim() === '') return { text: await showStatus($) }
+  return runCommand($, picked, deps)
+}
+
 // `/quiz last 3` and the like: a quiz on that scope, or why there is none.
 async function runCommand($: EngineInterface, args: string, deps: QuizCommandDeps): Promise<CommandRunResult> {
   const [name = '', ...words] = args.trim().toLowerCase().split(/\s+/)
@@ -98,5 +107,7 @@ async function runSubcommand($: EngineInterface, name: string, words: string[], 
 }
 
 export function registerQuizCommand(on: On, deps: QuizCommandDeps) {
-  on('command.run', { command: COMMAND_NAME }, async ($, e) => runCommand($, e.args, deps))
+  on('command.run', { command: COMMAND_NAME }, async ($, e) =>
+    e.args.trim() === '' ? runFromMenu($, deps) : runCommand($, e.args, deps),
+  )
 }

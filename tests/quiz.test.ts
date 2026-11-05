@@ -2,7 +2,7 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 
 import { delay } from '../hooks/lib/timers'
-import type { On, RenderPropsOf } from 'claude-code'
+import type { On, PromptAutocompleteInput, PromptAutocompleteResult, RenderPropsOf } from 'claude-code'
 
 const EDIT = { tool: 'Edit', file_path: '/repo/a.kt', old_string: 'a', new_string: 'b' } as const
 // Registered at runtime, so the generated tool types do not list it yet.
@@ -778,4 +778,31 @@ test('/quiz last outside a repo, or with a bad count, says why and starts nothin
   expect(bad.text).toContain('/quiz last [1-100]')
   await runQuizTurn($)
   expect(seen.submitted.length).toBe(0)
+})
+
+// ─── /quiz autocomplete ──────────────────────────────────────────────────────
+
+// Only the engine raises prompt.autocomplete, so the test engine's type
+// leaves it out; the test engine runs it all the same.
+type Autocomplete = (input: PromptAutocompleteInput) => Promise<PromptAutocompleteResult>
+const autocomplete = ($: Engine, text: string) => {
+  const start = text.search(/\S+$/)
+  const call = ($.prompt as unknown as { autocomplete: Autocomplete }).autocomplete
+  return call({ text, cursor: text.length, token: text.slice(start), start })
+}
+
+test('the /quiz autocomplete adds its rows after the engine\'s, and only for /quiz', async ($, on) => {
+  engine(on)
+  on('prompt.autocomplete', () => ({ suggestions: [{ text: '/quizzical' }] }))
+  await $.session.start(START)
+  await $.command.run(settingsCmd('wording standard'))
+
+  const word = await autocomplete($, '/quiz unc')
+  expect(word.suggestions.map(row => row.text)).toEqual(['/quizzical', 'uncommitted'])
+
+  const setting = await autocomplete($, '/quiz settings wor')
+  expect(setting.suggestions[1]?.description).toBe('Wording: now Standard')
+
+  const other = await autocomplete($, 'fix the bug')
+  expect(other.suggestions.map(row => row.text)).toEqual(['/quizzical'])
 })
