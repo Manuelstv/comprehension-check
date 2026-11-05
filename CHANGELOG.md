@@ -6,6 +6,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-05
+
 ### Added
 
 - **Quiz perspective.** `/quiz settings perspective mixed|code|architect|product`, also in the settings menu, sets the angle the questions take. **Code** asks how the change behaves. **Architecture** asks how it fits the system. **Product** asks what it means for users. **Mixed** (the default) draws on whichever of the three the change carries.
@@ -73,7 +75,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Mid-turn reminder plus a `Stop` hook fallback, so the quiz is asked once per turn.
 - `/quiz on|off|status`; the on/off setting persists across sessions.
 
-[Unreleased]: https://github.com/agharsallah/comprehension-check/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/agharsallah/comprehension-check/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/agharsallah/comprehension-check/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/agharsallah/comprehension-check/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/agharsallah/comprehension-check/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/agharsallah/comprehension-check/compare/v0.1.0...v0.2.0
