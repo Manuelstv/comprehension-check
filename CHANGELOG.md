@@ -6,6 +6,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-05
+
 ### Added
 
 - **Quizzes on demand.** `/quiz last` quizzes you on the last commit, `/quiz last <n>` on the last 1 to 100 commits, `/quiz uncommitted` on your staged, unstaged and new files, and `/quiz codebase` on the whole codebase as it stands. They read the code from git, follow your max questions, length and perspective settings, skip the yes/no step (you asked), and run even with `/quiz off`. Lock files never count and binary files are left out.
@@ -79,7 +81,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Mid-turn reminder plus a `Stop` hook fallback, so the quiz is asked once per turn.
 - `/quiz on|off|status`; the on/off setting persists across sessions.
 
-[Unreleased]: https://github.com/agharsallah/comprehension-check/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/agharsallah/comprehension-check/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/agharsallah/comprehension-check/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/agharsallah/comprehension-check/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/agharsallah/comprehension-check/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/agharsallah/comprehension-check/compare/v0.2.0...v0.3.0
