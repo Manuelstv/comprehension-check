@@ -6,6 +6,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-05
+
 ### Added
 
 - **Plain wording**, on by default. Questions, options and the scorecard feedback are written in short one-idea sentences and everyday words, with one ask per question, numbers that say what they are, and every status code or term explained where it appears. The questions stay just as hard. `/quiz settings wording standard` (or the settings menu) switches back to precise technical wording.
@@ -90,7 +92,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Mid-turn reminder plus a `Stop` hook fallback, so the quiz is asked once per turn.
 - `/quiz on|off|status`; the on/off setting persists across sessions.
 
-[Unreleased]: https://github.com/agharsallah/comprehension-check/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/agharsallah/comprehension-check/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/agharsallah/comprehension-check/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/agharsallah/comprehension-check/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/agharsallah/comprehension-check/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/agharsallah/comprehension-check/compare/v0.3.0...v0.4.0
