@@ -8,9 +8,9 @@ import type { EngineInterface, On } from 'claude-code'
 
 import { COMMAND_NAME, PLUGIN_NAME } from '../config'
 import type { ChangeTracker } from '../changes/changeTracker'
-import type { OwnDialogs } from '../quiz/ownDialogs'
 import { readStats, statsLine } from '../scorecard/stats'
 import { SETTINGS_USAGE, isQuizEnabled, readSettings, saveSettingFromWords, setQuizEnabled } from '../settings/settings'
+import type { OwnDialogs } from '../quiz/ownDialogs'
 import { openSettingsMenu } from '../settings/settingsMenu'
 import { runSelfUpdate, versionReport } from '../update/selfUpdate'
 

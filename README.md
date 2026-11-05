@@ -106,7 +106,7 @@ Quizzes are on as soon as the mod is installed. To uninstall it, run `claude plu
 Work with Claude as usual. When a turn changes code, Claude first asks whether you want the quiz now: **Yes, quiz me** or **Not now**.
 If you choose **Not now** or press Esc, the turn ends and Claude does not ask again until the next change.
 
-If you choose yes, Claude asks 2–4 questions in a single dialog (see [Settings](#settings) for how many). Above the questions, a short guide lists each one by number and format:
+If you choose yes, Claude asks up to 4 questions in a single dialog (see [Settings](#settings) for how many). With a max above 4, a longer quiz comes in rounds of up to 4 questions. You are asked to start only once, and one scorecard grades every round. Above the questions, a short guide lists each one by number and format:
 
 - **Single choice.** One correct answer and plausible distractors.
 - **Checkboxes.** More than one option is correct.
@@ -134,31 +134,40 @@ Claude makes no edits during the quiz. If one of your answers shows a real bug, 
 | `/quiz off` | Turn quizzes off. The setting persists across sessions. |
 | `/quiz status` (or `/quiz`) | Show whether quizzes are on |
 | `/quiz stats` | Show your record: quizzes, average, best score and streak |
-| `/quiz settings` | Open the settings menu: sound, max questions, and who decides the count |
+| `/quiz settings` | Open the settings menu: sound, max questions and quiz length |
 | `/quiz settings sound on\|off` | Turn the scorecard sounds on (the default) or off. `/quiz sound on\|off` still works. |
-| `/quiz settings questions 2\|3\|4` | The most questions a quiz may have (default 4) |
-| `/quiz settings count agent\|size` | Who decides how many questions: Claude (the default) or the size of the change |
+| `/quiz settings max <1-99>` | The most questions a quiz may have (default 4). `questions <n>` still works. |
+| `/quiz settings length claude\|size` | How the number of questions is chosen: Claude decides (the default), or it fits the size of the change. `count agent\|size` still works. |
 | `/quiz version` | Show the installed version, and whether a newer one is out |
 | `/quiz update` | Update the mod to the latest version, then tell you to run `/reload-plugins` |
 
 ### Settings
 
-`/quiz settings` opens a menu. Pick a setting, pick its value, and you're back at the menu until you choose **Done** or press Esc.
+`/quiz settings` opens one list of every setting with its current value, as `/config` does:
+
+```text
+Enter changes the setting you pick. Length now: Claude weighs how severe and complex the change is.
+❯ 1. Sound: On
+  2. Max questions: 4
+  3. Length: Claude decides
+  4. Done
+```
+
+- **↑ ↓** move, **Enter** changes the setting in place, and the list comes back with the new value.
+- **Sound** and **Length** switch on Enter.
+- **Max questions** asks for a number: pick 2, 4, 6 or 8, or type any number from 1 to 99 under **Other**.
+- **Done** or **Esc** closes it.
+
 Each setting can also be set in one line, as in the table above. Settings persist across sessions.
 
 | Setting | Values | Default |
 | --- | --- | --- |
 | **Sound** | on, off | on |
-| **Max questions** | 2, 3, 4 | 4 |
-| **Count** | `agent`: Claude picks 2 up to the max, by what the change needs. `size`: the mod sets the count from the change. | `agent` |
+| **Max questions** | 1–99. No quiz has more. | 4 |
+| **Length** | **Claude decides**: Claude weighs how severe and complex the change is and picks how many. **Fits change size**: 1 question per 100 changed lines. Both stay within the max. | Claude decides |
 
-With **Count: by change size**, a quiz starts at 2 questions and gets one more for each step the change reaches, never above your max:
-
-| Questions | Files touched | or lines changed |
-| --- | --- | --- |
-| 2 | 1–2 | under 80 |
-| 3 | 3–5 | 80–249 |
-| 4 | 6 or more | 250 or more |
+With **Fits change size**, 1–100 changed lines get 1 question, 101–200 get 2, and so on, up to your max.
+A quiz of more than 4 questions comes in rounds of up to 4. If you press Esc during a later round, Claude asks no more and grades the rounds you answered.
 
 Lines changed are counted as a diff counts them: lines removed plus lines added by each `Edit`, and every line of a `Write`.
 If the change grows mid-turn, Claude gets a note with the new count. A quiz of the wrong length goes back to Claude before you see it.
@@ -190,7 +199,7 @@ The hooks module's entry point is [`hooks/register.tsx`](hooks/register.tsx). It
 | `hooks/register.tsx` | The entry point. It creates the change tracker and other shared parts and registers each feature. |
 | `hooks/quiz/` | When to quiz: edits, reminders to Claude, the Yes / Not now gate, the Stop fallback, the question count and the prompts |
 | `hooks/changes/` | What changed: paths and line counts of edits, lock and git-ignored files, and the files owed a quiz |
-| `hooks/settings/` | The settings, defined once as a table, and the settings menu |
+| `hooks/settings/` | The settings, defined once as a table (`definitions.ts`), the store (`settings.ts`) and the settings menu (`settingsMenu.ts`) |
 | `hooks/scorecard/` | The results tool, grading, score tiers, stats and the scorecard drawing |
 | `hooks/ui/` | The banners above the question dialogs |
 | `hooks/update/` | `/quiz version` and `/quiz update` |
@@ -288,7 +297,7 @@ Users with auto-update get the new version the next time they start Claude Code.
 | Quiz appears without the yes/no step | Claude left out `metadata.source`. The quiz still works, without the heads-up. |
 | Plain text feedback instead of a scorecard | The mod was reloaded mid-session and the tool was not registered yet. Feedback still arrives, as text. |
 | Sounds are too much | Run `/quiz settings sound off`. |
-| Quizzes are too long | Run `/quiz settings questions 2`, or `/quiz settings count size` so small changes get 2 questions. |
+| Quizzes are too long | Run `/quiz settings max 2`, or `/quiz settings length size` so small changes get 1 question. |
 | No quiz after editing a generated file | Expected if git ignores it, or if it is a lock file (see [Settings](#settings)). |
 | No quiz after a change made through Bash | Expected. Edits made with shell commands such as `sed -i` are not tracked (see [Limitations](#limitations)). |
 | An update does not show up | Run `/quiz update` and then `/reload-plugins`. From a shell: `claude plugin marketplace update comprehension-check`, then `claude plugin update comprehension-check@comprehension-check`, then restart Claude Code. |

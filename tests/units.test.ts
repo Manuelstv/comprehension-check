@@ -7,9 +7,17 @@ import { editedPath, linesChangedBy } from '../hooks/changes/edits'
 import { isLockFile } from '../hooks/changes/ignoredFiles'
 import { isNewerVersion, versionInManifest } from '../hooks/lib/semver'
 import { pickStable } from '../hooks/lib/text'
-import { fitsQuestionCount, questionCountFor, questionsForSize } from '../hooks/quiz/questionCount'
+import {
+  fitsQuestionCount,
+  knownQuizLength,
+  mayNeedRounds,
+  questionCountFor,
+  questionsForSize,
+} from '../hooks/quiz/questionCount'
+import { QuizRounds } from '../hooks/quiz/quizRounds'
 import { TurnReminders } from '../hooks/quiz/turnReminders'
 import { parseResults, scoreOf, tierFor } from '../hooks/scorecard/grading'
+import { SETTING_DEFINITIONS } from '../hooks/settings/definitions'
 import { SETTINGS_USAGE } from '../hooks/settings/settings'
 import { fileListLine, fitRows } from '../hooks/ui/bannerLines'
 
@@ -45,24 +53,40 @@ test('edits: the path and the lines a diff would count', async () => {
   expect(linesChangedBy({ tool: 'Bash', command: 'ls' })).toBe(0)
 })
 
-test('size mode: one question more per step reached, capped by the max', async () => {
-  expect(questionsForSize(1, 10, 4)).toBe(2)
-  expect(questionsForSize(3, 10, 4)).toBe(3)
-  expect(questionsForSize(1, 80, 4)).toBe(3)
-  expect(questionsForSize(6, 0, 4)).toBe(4)
-  expect(questionsForSize(1, 300, 3)).toBe(3)
+test('size mode: 1 question per 100 changed lines, at least 1, never above the max', async () => {
+  expect(questionsForSize(0, 4)).toBe(1)
+  expect(questionsForSize(100, 4)).toBe(1)
+  expect(questionsForSize(101, 4)).toBe(2)
+  expect(questionsForSize(350, 4)).toBe(4)
+  expect(questionsForSize(900, 4)).toBe(4)
+  expect(questionsForSize(900, 12)).toBe(9)
 })
 
-test('question count follows the settings, and a quiz must fit it', async () => {
-  const changes = new Map([['/a.ts', 100]])
+test('question count follows the settings, and a quiz round must fit it', async () => {
+  const changes = new Map([['/a.ts', 150]])
   const sized = questionCountFor({ sound: true, maxQuestions: 4, sizing: 'size' }, changes)
-  expect(sized).toEqual({ mode: 'size', exact: 3, files: 1, lines: 100 })
-  expect(fitsQuestionCount(sized, 3)).toBe(true)
-  expect(fitsQuestionCount(sized, 2)).toBe(false)
+  expect(sized).toEqual({ mode: 'size', exact: 2, files: 1, lines: 150 })
+  expect(fitsQuestionCount(sized, 2)).toBe(true)
+  expect(fitsQuestionCount(sized, 1)).toBe(false)
 
   const agent = questionCountFor({ sound: true, maxQuestions: 3, sizing: 'agent' }, changes)
   expect(fitsQuestionCount(agent, 3)).toBe(true)
   expect(fitsQuestionCount(agent, 4)).toBe(false)
+  expect(mayNeedRounds(agent)).toBe(false)
+
+  const long = questionCountFor({ sound: true, maxQuestions: 10, sizing: 'agent' }, changes)
+  expect(fitsQuestionCount(long, 4, 4)).toBe(true)
+  expect(fitsQuestionCount(long, 3, 8)).toBe(false)
+  expect(fitsQuestionCount(long, 5)).toBe(false)
+  expect(mayNeedRounds(long)).toBe(true)
+  expect(knownQuizLength(long, 4)).toBeUndefined()
+  expect(knownQuizLength(long, 3)).toBe(3)
+
+  const big = { mode: 'size' as const, exact: 6, files: 1, lines: 550 }
+  expect(fitsQuestionCount(big, 4)).toBe(true)
+  expect(fitsQuestionCount(big, 2)).toBe(false)
+  expect(fitsQuestionCount(big, 2, 4)).toBe(true)
+  expect(knownQuizLength(big, 4)).toBe(6)
 })
 
 test('change tracker: pending, handed to Stop, then forgotten', async () => {
@@ -123,8 +147,21 @@ test('banner lines: the first line always fits, the file list stays on one row',
 
 test('settings usage lists every setting with its values', async () => {
   expect(SETTINGS_USAGE).toContain('/quiz settings sound on|off')
-  expect(SETTINGS_USAGE).toContain('/quiz settings questions 2|3|4')
-  expect(SETTINGS_USAGE).toContain('/quiz settings count agent|size')
+  expect(SETTINGS_USAGE).toContain('/quiz settings max 1-99')
+  expect(SETTINGS_USAGE).toContain('/quiz settings length claude|size')
+})
+
+test('settings: ←/→ steps each value, the max within 1-99', async () => {
+  const [sound, max, length] = SETTING_DEFINITIONS
+  expect(sound!.step(true, 1)).toBe(false)
+  expect(max!.step(4, 1)).toBe(5)
+  expect(max!.step(1, -1)).toBe(1)
+  expect(max!.step(99, 1)).toBe(99)
+  expect(length!.step('agent', -1)).toBe('size')
+  expect(max!.parse('07')).toBe(7)
+  expect(max!.parse('0')).toBeUndefined()
+  expect(max!.parse('none')).toBeUndefined()
+  expect(length!.hint('size')).toBe('1 question per 100 changed lines. Never more than the max.')
 })
 
 test('a stable pick: the same seed, the same line', async () => {

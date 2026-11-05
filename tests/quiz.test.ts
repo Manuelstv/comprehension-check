@@ -60,8 +60,8 @@ type Seen = { gate: string[]; quiz: number }
 type EngineOptions = {
   // Paths `git check-ignore` reports as ignored.
   ignored?: string[]
-  // Answers to the settings menu, in order; once used up, the menu is dismissed.
-  settings?: string[]
+  // Quiz rounds the user dismisses.
+  dismissQuiz?: (questions: number) => boolean
   // Answers `claude ...` commands (for /quiz update).
   claude?: (argv: readonly string[]) => { exitCode: number; stdout: string; stderr: string } | 'cannot start'
 }
@@ -70,7 +70,6 @@ type EngineOptions = {
 // AskUserQuestion, answered with `gateAnswer`.
 const engine = (on: On, gateAnswer: string | 'dismiss' = 'Yes, quiz me', opts: EngineOptions = {}) => {
   const seen: Seen = { gate: [], quiz: 0 }
-  const settingsAnswers = [...(opts.settings ?? [])]
   on('tool.call', (_, e) => {
     if (e.tool === 'AskUserQuestion') {
       const qs = (e as { questions: { question: string; header: string }[] }).questions
@@ -79,12 +78,8 @@ const engine = (on: On, gateAnswer: string | 'dismiss' = 'Yes, quiz me', opts: E
         if (gateAnswer === 'dismiss') return { deny: 'dismissed' }
         return { result: { questions: qs, answers: { [qs[0].question]: gateAnswer } } }
       }
-      if (['Settings', 'Sound', 'Questions', 'Count'].includes(qs[0]?.header ?? '')) {
-        const picked = settingsAnswers.shift()
-        if (picked === undefined) return { deny: 'dismissed' }
-        return { result: { questions: qs, answers: { [qs[0]?.question ?? '']: picked } } }
-      }
       seen.quiz += 1
+      if (opts.dismissQuiz?.(qs.length) === true) return { deny: 'dismissed' }
     }
     return { result: {} }
   })
@@ -361,40 +356,18 @@ test('lock files and git-ignored files never call for a quiz', async ($, on) => 
   expect(r.block).toBeUndefined()
 })
 
-test('settings are set by words and shown when the dialog is dismissed', async ($, on) => {
+test('settings are set in one line, with the old names still accepted', async ($, on) => {
   engine(on)
   await $.session.start(START)
 
-  expect((await $.command.run(settingsCmd('questions 3'))).text).toContain('at most 3')
-  expect((await $.command.run(settingsCmd('count size'))).text).toContain('size of the change')
+  expect((await $.command.run(settingsCmd('max 3'))).text).toContain('at most 3 questions')
+  expect((await $.command.run(settingsCmd('questions 12'))).text).toContain('at most 12 questions')
+  expect((await $.command.run(settingsCmd('length size'))).text).toContain('1 question per 100 changed lines')
+  expect((await $.command.run(settingsCmd('count agent'))).text).toContain('Claude decides')
   expect((await $.command.run(settingsCmd('sound off'))).text).toContain('off')
-  expect((await $.command.run(settingsCmd('questions 9'))).text).toContain('Unknown setting')
-
-  const shown = await $.command.run(settingsCmd(''))
-  expect(shown.text).toContain('No changes')
-  expect(shown.text).toContain('sound off · at most 3 questions · count by change size')
-})
-
-test('the settings dialog saves what the user picks', async ($, on) => {
-  engine(on, 'Yes, quiz me', {
-    settings: ['Sound: On', 'Off', 'Max questions: 4', '2', 'Count: Claude decides', 'By change size', 'Done'],
-  })
-  await $.session.start(START)
-
-  const r = await $.command.run(settingsCmd(''))
-  expect(r.text).toContain('Saved')
-  expect(r.text).toContain('sound off · at most 2 questions · count by change size')
-})
-
-test('the settings dialog does not count as a quiz', async ($, on) => {
-  engine(on, 'Yes, quiz me', { settings: ['Sound: On', 'On', 'Done'] })
-  await $.session.start(START)
-
-  await $.tool.call({ ...EDIT, file_path: '/repo/settings-owed.kt' })
-  await $.command.run(settingsCmd(''))
-
-  const r = await $.classic.Stop({ stop_hook_active: false })
-  expect(r.block).toContain('/repo/settings-owed.kt')
+  for (const bad of ['max 0', 'max none', 'max 100', 'length often']) {
+    expect((await $.command.run(settingsCmd(bad))).text).toContain('Unknown setting')
+  }
 })
 
 test('/quiz sound still works as before', async ($, on) => {
@@ -403,54 +376,118 @@ test('/quiz sound still works as before', async ($, on) => {
   expect((await $.command.run({ command: 'quiz', args: 'sound off', ...RUN })).text).toContain('off')
 })
 
-test('Claude decides up to the max, and a longer quiz is sent back', async ($, on) => {
+test('Claude decides by severity and complexity, up to the max; a longer quiz is sent back', async ($, on) => {
   const { seen, session } = engine(on)
   await $.session.start(START)
-  await $.command.run(settingsCmd('questions 2'))
+  await $.command.run(settingsCmd('max 2'))
 
   await $.tool.call({ ...EDIT, file_path: '/repo/max.kt' })
-  expect(noteTexts(session)[0]).toContain('with 2 questions')
+  expect(noteTexts(session)[0]).toContain('1 to 2 questions')
+  expect(noteTexts(session)[0]).toContain('severe and complex')
 
-  const three = { ...QUIZ, questions: [...QUIZ.questions, ...QUIZ.questions.slice(0, 1)] }
-  const ran = await $.tool.call(three)
-  expect(ran.deny).toContain('at most 2')
+  const ran = await $.tool.call(quizOf(3))
+  expect(ran.deny).toContain('at most 2 questions')
   expect(seen.gate.length).toBe(0)
 
   expect((await $.tool.call(QUIZ)).deny).toBeUndefined()
   expect(seen.quiz).toBe(1)
 })
 
-test('by change size, the count grows with the files and lines changed', async ($, on) => {
+const linesOf = (n: number) => Array.from({ length: n }, (_, i) => `line ${i}`).join('\n')
+
+test('by change size: 1 question per 100 changed lines', async ($, on) => {
   const { seen, session } = engine(on)
   await $.session.start(START)
-  await $.command.run(settingsCmd('count size'))
+  await $.command.run(settingsCmd('length size'))
 
-  await $.tool.call({ ...EDIT, file_path: '/repo/s1.kt' })
-  expect(noteTexts(session)[0]).toContain('exactly 2 questions')
+  await $.tool.call({ tool: 'Write', file_path: '/repo/s1.kt', content: linesOf(100) })
+  expect(noteTexts(session)[0]).toContain('exactly 1 question (1 per 100 changed lines')
 
-  await $.tool.call({ ...EDIT, file_path: '/repo/s2.kt' })
-  await $.tool.call({ ...EDIT, file_path: '/repo/s3.kt' })
+  await $.tool.call({ tool: 'Write', file_path: '/repo/s2.kt', content: linesOf(50) })
   const notes = noteTexts(session)
   expect(notes.length).toBe(2)
-  expect(notes[1]).toContain('ask exactly 3 questions')
+  expect(notes[1]).toContain('about 150 changed lines: ask exactly 2 questions')
 
-  // Two questions is now too few: back to Claude, the user not asked.
-  const ran = await $.tool.call(QUIZ)
-  expect(ran.deny).toContain('exactly 3')
+  // One question is now too few: back to Claude, the user not asked.
+  const ran = await $.tool.call(quizOf(1))
+  expect(ran.deny).toContain('exactly 2')
   expect(seen.gate.length).toBe(0)
 })
 
-test('by change size, a big diff in one file asks the max, and the Stop note says so', async ($, on) => {
+test('by change size, the max still caps the count, and the Stop note says so', async ($, on) => {
   engine(on)
   await $.session.start(START)
-  await $.command.run(settingsCmd('count size'))
+  await $.command.run(settingsCmd('length size'))
 
-  const big = Array.from({ length: 300 }, (_, i) => `line ${i}`).join('\n')
-  await $.tool.call({ tool: 'Write', file_path: '/repo/big.kt', content: big })
-
+  await $.tool.call({ tool: 'Write', file_path: '/repo/big.kt', content: linesOf(900) })
   const r = await $.classic.Stop({ stop_hook_active: false })
   expect(r.block).toContain('exactly 4 questions')
-  expect(r.block).toContain('about 300 lines')
+  expect(r.block).toContain('about 900 lines')
+})
+
+// A quiz round of `n` questions (n <= 4 for a valid round).
+const quizOf = (n: number) => ({
+  ...QUIZ,
+  questions: Array.from({ length: n }, (_, i) => ({ ...QUIZ.questions[i % 2]!, question: `Q${i + 1} on a.kt?` })),
+})
+
+test('a max past 4: the quiz comes in rounds, the user is asked to start once', async ($, on) => {
+  const { seen, session } = engine(on)
+  await $.session.start(START)
+  await $.command.run(settingsCmd('max 10'))
+
+  await $.tool.call({ ...EDIT, file_path: '/repo/long.kt' })
+  expect(noteTexts(session)[0]).toContain('rounds of 4')
+
+  // A full first round: the length is not known yet.
+  expect((await $.tool.call(quizOf(4))).deny).toBeUndefined()
+  expect(seen.gate).toEqual(['🧠 Quiz time! Ready for a few quick questions on what Claude just changed?'])
+
+  // Later rounds go straight to the user, within the max.
+  expect((await $.tool.call(quizOf(4))).deny).toBeUndefined()
+  const over = await $.tool.call(quizOf(3))
+  expect(over.deny).toContain('after 8 in earlier rounds')
+  expect((await $.tool.call(quizOf(2))).deny).toBeUndefined()
+  expect(seen.gate.length).toBe(1)
+  expect(seen.quiz).toBe(3)
+
+  // A round past one dialog goes back to Claude.
+  expect((await $.tool.call(quizOf(5))).deny).toContain('at most 4 questions per call')
+
+  // Graded: the next quiz is a new one, with its own gate.
+  await $.tool.call({ tool: RESULTS_TOOL, ...GRADES })
+  await $.tool.call({ ...EDIT, file_path: '/repo/again.kt' })
+  await $.tool.call(quizOf(2))
+  expect(seen.gate.length).toBe(2)
+})
+
+test('by change size past 4: rounds of 4, then the rest, the total told up front', async ($, on) => {
+  const { seen } = engine(on)
+  await $.session.start(START)
+  await $.command.run(settingsCmd('max 10'))
+  await $.command.run(settingsCmd('length size'))
+
+  await $.tool.call({ tool: 'Write', file_path: '/repo/huge.kt', content: linesOf(550) })
+  expect((await $.tool.call(quizOf(3))).deny).toContain('exactly 4 questions')
+  expect((await $.tool.call(quizOf(4))).deny).toBeUndefined()
+  expect(seen.gate[0]).toContain('Ready for 6 quick questions')
+  expect((await $.tool.call(quizOf(4))).deny).toContain('exactly 2 questions')
+  expect((await $.tool.call(quizOf(2))).deny).toBeUndefined()
+  expect(seen.gate.length).toBe(1)
+})
+
+test('a dismissed round ends the quiz', async ($, on) => {
+  const { seen } = engine(on, 'Yes, quiz me', { dismissQuiz: n => n === 3 })
+  await $.session.start(START)
+  await $.command.run(settingsCmd('max 10'))
+
+  await $.tool.call({ ...EDIT, file_path: '/repo/d.kt' })
+  await $.tool.call(quizOf(4))
+  await $.tool.call(quizOf(3))
+  // The next quiz call is a new quiz, with its own gate.
+  await $.tool.call({ ...EDIT, file_path: '/repo/d2.kt' })
+  await $.tool.call(quizOf(2))
+  expect(seen.gate.length).toBe(2)
 })
 
 // Core's own drawing: the dialog must hold it exactly once.

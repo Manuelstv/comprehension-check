@@ -8,8 +8,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
-- `/quiz settings`: a menu for sound, the max number of questions (2–4) and who decides the count. Each one can also be set in one line: `/quiz settings sound on|off`, `/quiz settings questions 2|3|4`, `/quiz settings count agent|size`.
-- **Count by change size.** With `count size`, the number of questions follows the files touched and the lines changed, up to your max. Claude is told the count, and told again if the change grows. A quiz of the wrong length goes back to Claude before you see it.
+- `/quiz settings` lists every setting with its value, as `/config` does. ↑↓ moves, Enter changes the setting in place, and the list comes back with the new value. Sound and Length switch on Enter; Max questions offers 2, 4, 6 or 8, or any number from 1 to 99 typed under Other. Each setting can also be set in one line: `/quiz settings sound on|off`, `/quiz settings max <1-99>`, `/quiz settings length claude|size`.
+- **Max questions** is any number from 1 to 99. A quiz of more than 4 questions comes in rounds of up to 4. You are asked to start once, and one scorecard grades every round.
+- **Quiz length.** With **Claude decides**, Claude weighs how severe and complex the change is. With **Fits change size**, a quiz has 1 question per 100 changed lines. Both stay within the max. Claude is told the count, and told again if the change grows. A quiz of the wrong length goes back to Claude before you see it. `count agent|size` still works.
 
 ### Changed
 

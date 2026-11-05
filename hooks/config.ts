@@ -30,26 +30,21 @@ export const STORE_KEYS = {
 
 // ─── Quiz size ───────────────────────────────────────────────────────────────
 
-// AskUserQuestion takes at most 4 questions, and mixing a single-choice with a
-// checkbox question needs at least 2.
-export const QUESTION_LIMITS = { min: 2, max: 4 } as const
+// The max questions a user can set, and the most one dialog holds: a longer
+// quiz is asked in rounds of up to `perDialog`.
+export const QUESTION_LIMITS = { min: 1, max: 99, perDialog: 4 } as const
 
-// `agent`: Claude picks min..max for the change. `size`: the mod sets the count
-// from the files touched and the lines changed.
+// `agent`: Claude weighs the change and picks how many, up to the max.
+// `size`: one question per LINES_PER_QUESTION changed lines, up to the max.
 export type Sizing = 'agent' | 'size'
+
+export const LINES_PER_QUESTION = 100
 
 export const DEFAULT_SETTINGS = {
   sound: true,
-  maxQuestions: QUESTION_LIMITS.max,
+  maxQuestions: QUESTION_LIMITS.perDialog as number,
   sizing: 'agent' as Sizing,
 } as const
-
-// In size mode a quiz starts at QUESTION_LIMITS.min questions and gets one more
-// for each step it reaches: the files OR the lines of the step.
-export const SIZE_STEPS: readonly { files: number; lines: number }[] = [
-  { files: 3, lines: 80 },
-  { files: 6, lines: 250 },
-]
 
 // ─── Files that never count as a change ──────────────────────────────────────
 
@@ -92,11 +87,16 @@ export const GATE = {
   yesWords: /^\s*(y|yes|sure|ok|okay|go)\b/i,
 } as const
 
+// The settings menu opened by `/quiz settings`.
 export const SETTINGS_MENU = {
   header: 'Settings',
   done: 'Done',
+  // Marks the current value among the max-questions options.
+  currentMark: ' (current)',
+  // The max questions offered; any number from 1 to 99 can be typed.
+  maxPresets: [2, 4, 6, 8],
   // Rounds of the menu before it closes by itself.
-  maxRounds: 6,
+  maxRounds: 12,
 } as const
 
 // Rows the terminal leaves the banner above a question dialog, and the width

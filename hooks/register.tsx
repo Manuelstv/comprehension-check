@@ -17,6 +17,7 @@ import { IgnoredFileCache } from './changes/ignoredFiles'
 import { defineQuizCommand, registerQuizCommand } from './commands/quizCommand'
 import { createOwnDialogs } from './quiz/ownDialogs'
 import { registerQuizFlow } from './quiz/quizFlow'
+import { QuizRounds } from './quiz/quizRounds'
 import { TurnReminders } from './quiz/turnReminders'
 import { defineResultsTool, registerResultsTool } from './scorecard/resultsTool'
 import { registerScorecardView } from './scorecard/scorecardView'
@@ -24,6 +25,7 @@ import { registerDialogBanners } from './ui/dialogBanners'
 
 export const register: Register = on => {
   const changes = new ChangeTracker()
+  const rounds = new QuizRounds()
   const ownDialogs = createOwnDialogs()
 
   on('session.start', async ($, e, next) => {
@@ -33,11 +35,12 @@ export const register: Register = on => {
   })
 
   registerQuizCommand(on, { changes, ownDialogs })
-  registerResultsTool(on)
+  registerResultsTool(on, rounds)
   registerQuizFlow(on, {
     changes,
-    ownDialogs,
     reminders: new TurnReminders(),
+    rounds,
+    ownDialogs,
     ignoredFiles: new IgnoredFileCache(),
   })
   registerScorecardView(on)

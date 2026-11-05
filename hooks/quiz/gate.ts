@@ -9,6 +9,7 @@ const isYes = (answer: string | undefined) =>
   answer !== undefined && (answer === GATE.yes || GATE.yesWords.test(answer))
 
 // True when the user wants the quiz now. Dismissing the dialog is a no.
+// `questions` is the quiz's length, or 0 when it is not known yet.
 export async function askToStartQuiz($: EngineInterface, files: string[], questions: number): Promise<boolean> {
   // The banner above the dialog reads this.
   await showGateInfo($, { files, questions })
