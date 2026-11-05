@@ -56,6 +56,6 @@ export async function requestQuiz($: RequestHost, scope: QuizScope, request: Qui
   void submitAfterCommand($, request)
   return {
     text: requestSummary(snapshot, count, settings),
-    context: [requestedQuizNote(subjectOf(snapshot), count, settings.perspective)],
+    context: [requestedQuizNote(subjectOf(snapshot), count, settings)],
   }
 }

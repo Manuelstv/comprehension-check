@@ -23,10 +23,13 @@ Results and an HTML report go to `evals/results/` (git-ignored).
 
 | Case | Kind | What it checks |
 | --- | --- | --- |
-| `retry-backoff` | End to end, live prompt | Claude makes a real change. The mod injects its instructions, and the quiz Claude writes (default **mixed** perspective) is grounded in the change, makes the user reason, asks about a decision Claude made on its own, mixes formats and gives nothing away. |
+| `retry-backoff` | End to end, live prompt | Claude makes a real change. The mod injects its instructions, and the quiz Claude writes (default **mixed** perspective, **plain** wording) is grounded in the change, makes the user reason, asks about a decision Claude made on its own, mixes formats, gives nothing away and reads easily. |
 | `no-change-no-quiz` | End to end | A turn that edits nothing gets no quiz. |
 | `lens-code`, `lens-architecture`, `lens-product` | Generated prompt | The same price-cache change under each perspective. The quiz keeps to the lens and stays grounded and critical. The change is chosen to read differently through each lens: a TTL boundary and an untested expiry (code), a per-instance cache with no invalidation (architecture), shoppers charged a stale price at checkout (product). |
 | `grading` | Generated prompt | Claude grades fixed answers fairly: reasoning over wording, partial credit, a right pick with a wrong stated reason. It reports the grades through the scorecard tool and does not repeat them as text. |
+| `wording-plain` | Generated prompt | With **plain** wording, the quiz on a jargon-heavy change (`If-Match`/ETag, 412 retries, a field-by-field merge) is easy to read and still grounded, critical and fair. The change is chosen to be hard to talk about plainly; on the simpler price-cache change, standard wording already reads plainly and the two modes look alike. |
+| `wording-standard` | Generated prompt | The control for `wording-plain`: the same change with **standard** wording, graded on the same quality properties. If plain wording costs depth, the gap shows here. |
+| `grading-plain` | Generated prompt | With plain wording, the same fixed answers get the same verdicts, and the scorecard feedback is easy to read. |
 
 ### Graders
 
@@ -41,6 +44,26 @@ Graders that need judgment are `llm` rubrics, one property per file, so a failur
 | `hidden-decision` | At least one question is about a choice Claude made that the user did not ask for. |
 | `fair-options` | No absurd distractor, no marker and no much longer option singles out the answer. |
 | `lens` | Every question takes the chosen perspective, judged by how it is answered, not by what it mentions. |
+| `plain-words` | A newcomer to the code reads each question and option in one pass: short one-idea sentences, one ask, numbers that say what they are, terms explained where they appear. At most one question may slip. |
+| `plain-feedback` | The same for the scorecard: punchlines, explanations and `next_step`. |
+
+Plain wording also has deterministic checks: `short-questions` (under 300 characters), `short-options` (descriptions under 100) and `no-wrapper` (no "Which of the following statements").
+
+### Calibrating the wording graders
+
+A readability rubric that every quiz fails, or every quiz passes, measures nothing. So `plain-words` and `plain-feedback` were checked against
+quizzes of known kind with the default judge (haiku, 3 votes each) before being trusted:
+
+| Input | `plain-words` verdict |
+| --- | --- |
+| Plain quizzes from `wording-plain` | 4 of 6 pass |
+| Standard quizzes from `wording-standard` | 0 of 3 pass |
+| A dense quiz written without the rule | fails |
+
+The first version of `plain-words` required every check to hold for every question. It failed plain and standard quizzes alike, though
+plain ones broke 1–2 questions in 4 and standard ones all 4. It also marked a scenario told in several short steps as hard to read, which
+judges the reasoning, not the wording. Both were fixed. If you change either rubric, re-run this check against the `wording-standard` quizzes:
+a rubric the control passes no longer tells the two modes apart.
 
 ## Why some prompts are generated
 

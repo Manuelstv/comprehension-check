@@ -26,6 +26,7 @@ export const STORE_KEYS = {
   maxQuestions: 'maxQuestions',
   sizing: 'sizing',
   perspective: 'perspective',
+  wording: 'wording',
   stats: 'stats',
 } as const
 
@@ -48,11 +49,21 @@ export const LINES_PER_QUESTION = 100
 export const PERSPECTIVES = ['mixed', 'code', 'architecture', 'product'] as const
 export type Perspective = (typeof PERSPECTIVES)[number]
 
+// ─── Quiz wording ────────────────────────────────────────────────────────────
+
+// How the quiz is written. `plain`: short sentences and everyday words, so the
+// user's time goes into the answer, not into reading the question. `standard`:
+// precise technical wording, as dense as the change calls for. The rules for
+// each are in quiz/prompts.ts.
+export const WORDINGS = ['plain', 'standard'] as const
+export type Wording = (typeof WORDINGS)[number]
+
 export const DEFAULT_SETTINGS = {
   sound: true,
   maxQuestions: QUESTION_LIMITS.perDialog as number,
   sizing: 'agent' as Sizing,
   perspective: 'mixed' as Perspective,
+  wording: 'plain' as Wording,
 } as const
 
 // ─── Files that never count as a change ──────────────────────────────────────
@@ -115,10 +126,14 @@ export const GATE = {
   yesWords: /^\s*(y|yes|sure|ok|okay|go)\b/i,
 } as const
 
-// The settings menu opened by `/quiz settings`. It lists one row per setting
-// and nothing else, since a dialog holds at most 4 options: Esc closes it.
+// The settings menu opened by `/quiz settings`. A dialog holds at most
+// QUESTION_LIMITS.perDialog options, so with more settings than that the menu
+// comes in pages: the settings, then a row to the next page (or back to the
+// first from the last). Esc closes it.
 export const SETTINGS_MENU = {
   header: 'Settings',
+  moreRow: 'More settings…',
+  backRow: 'Back',
   // Marks the current value among the max-questions options.
   currentMark: ' (current)',
   // The max questions offered; any number from 1 to 99 can be typed.

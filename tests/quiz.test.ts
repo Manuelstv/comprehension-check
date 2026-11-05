@@ -432,6 +432,20 @@ test('by change size: 1 question per 100 changed lines', async ($, on) => {
   expect(seen.gate.length).toBe(0)
 })
 
+test('plain wording is the default; standard wording leaves its rule out', async ($, on) => {
+  const { session } = engine(on)
+  await $.session.start(START)
+
+  await $.tool.call({ ...EDIT, file_path: '/repo/plain.kt' })
+  expect(noteTexts(session)[0]).toContain('Wording: plain.')
+
+  expect((await $.command.run(settingsCmd('wording technical'))).text).toContain('Quiz wording: Standard')
+  const r = await $.classic.Stop({ stop_hook_active: false })
+  expect(r.block).toContain('Perspective: mixed')
+  expect(r.block).not.toContain('Wording: plain')
+  expect((await $.command.run(settingsCmd('words loud'))).text).toContain('Unknown setting')
+})
+
 test('the perspective setting picks the lens Claude is told to quiz from', async ($, on) => {
   const { session } = engine(on)
   await $.session.start(START)

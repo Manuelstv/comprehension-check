@@ -2,7 +2,7 @@
 // carry them, and the replies to a refused quiz call.
 
 import { LINES_PER_QUESTION, QUESTION_LIMITS, QUIZ_SOURCE, QUIZ_TOOL, RESULTS_TOOL } from '../config'
-import type { Perspective } from '../config'
+import type { Perspective, Wording } from '../config'
 import { plural } from '../lib/text'
 import { mayNeedRounds, nextRoundSize } from './questionCount'
 import type { QuestionCount, SizedCount } from './questionCount'
@@ -89,6 +89,24 @@ const perspectiveRule = (perspective: Perspective): string => {
   return `Perspective: ${lens.name}. The user chose to be quizzed on ${lens.focus}, so EVERY question takes this angle, including the riskiest-part, decision and test questions below. ${lens.elsewhere[0]?.toUpperCase()}${lens.elsewhere.slice(1)} belong to other perspectives: leave them out unless you can ask them as a ${lens.name.toLowerCase()} question. If the change barely touches this angle, ask how it could still reach it rather than switching angle. Good angles:${angleList(lens)}`
 }
 
+// How the quiz reads: the angle its questions take and how they are worded.
+// The user's Settings carry both.
+export type QuizStyle = { perspective: Perspective; wording: Wording }
+
+// The rules a plain-worded quiz adds. Plain is about the reading, not the
+// difficulty: the reasoning a question asks for stays the same.
+export const PLAIN_WORDING = `Wording: plain. The user wants to spend their time thinking about the answer, not working out what the question means. Write every question, option and piece of feedback in plain, everyday words:
+   - short sentences of about 15 words, one idea each. A question may set the scene in a few such sentences, then asks ONE thing; about 40 words in all. Not "what happens, and why?": the options carry the why,
+   - say what each number is: "a price of 10 at 9:00", not "A1 at 10 at 9:00",
+   - option labels of 1-4 words that name the idea; descriptions of about 12 words at most,
+   - keep each question anchored: still name the function or file it is about, in backticks. Cut the jargon around that name instead: the first time a status code, header or technical term appears, say what it means in a few words ("a 412, the server's answer that someone saved first"), and describe code operators in words ("treats a copied list as changed", not "!== compares references"). This holds for options as much as questions, and each question stands alone: explain a term again in every question that uses it,
+   - active voice with a clear subject ("getPrice returns the old price", not "a stale value is returned"), one idea per sentence, no double negatives, no "Which of the following statements is true",
+   - when the twist of a question is a negation ("does NOT prove", "is NOT true"), write NOT in capitals so it cannot be missed,
+   - in the scorecard, the same plain words: a newcomer to this code reads each punchline, explanation and next_step in one pass.
+   Plain words must not make the answer easier to guess: keep the reasoning just as hard and the options just as fair. Every other rule still applies.`
+
+const wordingRules = (wording: Wording): string[] => (wording === 'plain' ? [PLAIN_WORDING] : [])
+
 // `requested`: the user asked for this quiz (`/quiz last` and the like), so
 // it goes to them without the yes/no question first.
 export type QuizOptions = { requested?: boolean }
@@ -98,25 +116,30 @@ const howItReachesThem = ({ requested = false }: QuizOptions) =>
     ? 'The user asked for this quiz, so it goes straight to them, with answering instructions above your questions.'
     : 'The mod first asks the user whether they want the quiz, then shows answering instructions above your questions.'
 
-export const quizInstructions = (count: QuestionCount, perspective: Perspective, options: QuizOptions = {}) => `1. ${howToAsk(count)} ${howItReachesThem(options)}
-2. ${QUIZ_GOAL}
-3. ${perspectiveRule(perspective)}
-4. Every question must:
+const numbered = (rules: readonly string[]) => rules.map((rule, i) => `${i + 1}. ${rule}`).join('\n')
+
+export const quizInstructions = (count: QuestionCount, style: QuizStyle, options: QuizOptions = {}) =>
+  numbered([
+    `${howToAsk(count)} ${howItReachesThem(options)}`,
+    QUIZ_GOAL,
+    perspectiveRule(style.perspective),
+    ...wordingRules(style.wording),
+    `Every question must:
    - be about THIS change: name the file, function or behavior it is about. If someone could answer it without having seen the change, rewrite it,
    - test reasoning (why, what if, what breaks, what it proves), not trivia such as names, syntax, line counts or API spellings,
    - hold one idea and stand alone: the dialog shows only the question and its options.
    Across the quiz, always through the chosen perspective:
    - ask at least one question about a decision Claude made that the user did not ask for: a default, an assumption, something left out of scope, or how two requirements in tension were resolved. Summaries hide these,
    - if the change added or ran tests or checks, ask what they prove and what they would miss: a green check proves one thing,
-   - start with the riskiest part of the change, where being wrong costs the most.
-5. With 2 or more questions, mix the formats:
+   - start with the riskiest part of the change, where being wrong costs the most.`,
+    `With 2 or more questions, mix the formats:
    - at least one single-choice question (multiSelect: false),
    - at least one checkbox question (multiSelect: true) where more than one option is correct,
    - the user can always type a free-text answer via "Other"; for one question, make the options deliberately incomplete so explaining in their own words is the best answer.
-   Keep each header short and concrete (it is shown in the instructions): "Edge case", "Trade-off", "Blast radius", "User impact".
-6. Give 2-4 options per question. Make every wrong option a mistake a reasonable reader could make (a real misconception, a plausible alternative design, a neighbouring wrong line), stated with a reason just as specific as the right one's. The right option must not stand out by length or precision, the classic give-away: keep every option's label plus description within about 15 characters of the others, and before sending, if the right one is the longest, shorten it or lengthen a wrong one. Vary its position; no "all of the above" or "none of the above". Do NOT mark the correct answer, add "(Recommended)", or hint at it in labels or descriptions.
-7. If the ${QUIZ_TOOL} call comes back saying the user skipped the quiz, or they dismiss it, accept that and end the turn with one short line. Do not ask again.
-8. After the user answers${mayNeedRounds(count) ? ' the last round' : ''}, grade every question and call ${RESULTS_TOOL} ONCE with all of them. It draws a playful scorecard (score, percentage, effects) for the user. Grade the reasoning, not the wording: a free-text answer with the core idea is correct; one with part of it, or the right pick for a stated wrong reason, is partial. A checkbox answer is correct only with every right option and no wrong one, partial with some right. Per question give:
+   Keep each header short and concrete (it is shown in the instructions): "Edge case", "Trade-off", "Blast radius", "User impact".`,
+    `Give 2-4 options per question. Make every wrong option a mistake a reasonable reader could make (a real misconception, a plausible alternative design, a neighbouring wrong line), stated with a reason just as specific as the right one's. The right option must not stand out by length or precision, the classic give-away: keep every option's label plus description within about 15 characters of the others, and before sending, if the right one is the longest, shorten it or lengthen a wrong one. Vary its position; no "all of the above" or "none of the above". Do NOT mark the correct answer, add "(Recommended)", or hint at it in labels or descriptions.`,
+    `If the ${QUIZ_TOOL} call comes back saying the user skipped the quiz, or they dismiss it, accept that and end the turn with one short line. Do not ask again.`,
+    `After the user answers${mayNeedRounds(count) ? ' the last round' : ''}, grade every question and call ${RESULTS_TOOL} ONCE with all of them. It draws a playful scorecard (score, percentage, effects) for the user. Grade the reasoning, not the wording: a free-text answer with the core idea is correct; one with part of it, or the right pick for a stated wrong reason, is partial. A checkbox answer is correct only with every right option and no wrong one, partial with some right. Per question give:
    - question: a 2-6 word label ("Why the Stop fallback"),
    - verdict: correct | partial | incorrect,
    - user_answer: what they picked or wrote, short; correct_answer: the right answer, short,
@@ -124,26 +147,27 @@ export const quizInstructions = (count: QuestionCount, perspective: Perspective,
    - explanation: 1-2 tight sentences with the why, tied to the code, and the misconception if any. If their answer exposes a risk you missed, say so here instead of defending the change,
    - ref: file:line where it lives, when useful.
    Also give next_step: one concrete action for their biggest gap (a line to read, a check to run, an input to try), never just "review the code".
-   The scorecard IS the feedback: do not repeat it in your own text. After the tool returns, write at most one short line. If ${RESULTS_TOOL} is not available, give the same feedback as short text instead.
-9. Do not edit any files during the quiz. If an answer exposes a real problem in the change, say so and propose a fix, but wait for the user's go-ahead.`
+   The scorecard IS the feedback: do not repeat it in your own text. After the tool returns, write at most one short line. If ${RESULTS_TOOL} is not available, give the same feedback as short text instead.`,
+    `Do not edit any files during the quiz. If an answer exposes a real problem in the change, say so and propose a fix, but wait for the user's go-ahead.`,
+  ])
 
 // Left for Claude at the first edit of a turn.
-export const firstEditNote = (count: QuestionCount, perspective: Perspective) =>
+export const firstEditNote = (count: QuestionCount, style: QuizStyle) =>
   `${TAG} The user has enabled comprehension quizzes. You have started changing code in this turn. Keep working on the task as normal; once ALL the code changes for this request are done, and before you end your turn, quiz the user on what you changed:
-${quizInstructions(count, perspective)}${count.mode === 'size' ? `\nIf the change grows, a later ${TAG} note raises the count; use the latest one.` : ''}`
+${quizInstructions(count, style)}${count.mode === 'size' ? `\nIf the change grows, a later ${TAG} note raises the count; use the latest one.` : ''}`
 
 // Left for Claude when the change has grown into a larger quiz (size mode).
 export const changeGrewNote = (count: SizedCount) =>
   `${TAG} The change has grown to about ${count.lines} changed lines: ask exactly ${questions(count.exact)} in the quiz.`
 
 // Sent back to Claude by the Stop hook when it tried to end an unquizzed turn.
-export const unquizzedStopNote = (files: readonly string[], count: QuestionCount, perspective: Perspective) =>
+export const unquizzedStopNote = (files: readonly string[], count: QuestionCount, style: QuizStyle) =>
   `${TAG} You changed code this turn. Before ending, quiz the user on it to check their understanding and build their critical thinking.
 
 Files changed: ${files.map(f => `\n- ${f}`).join('')}
 
 Do this now:
-${quizInstructions(count, perspective)}`
+${quizInstructions(count, style)}`
 
 // What an on-demand quiz is about, as Claude is told it.
 export type QuizSubject = {
@@ -169,7 +193,7 @@ const subjectReading = (subject: QuizSubject) =>
 
 // Left for Claude by `/quiz last|uncommitted|codebase`, before the prompt
 // that starts the quiz's turn.
-export const requestedQuizNote = (subject: QuizSubject, count: QuestionCount, perspective: Perspective) => {
+export const requestedQuizNote = (subject: QuizSubject, count: QuestionCount, style: QuizStyle) => {
   const more = subject.moreFiles > 0 ? `\n- … and ${subject.moreFiles} more` : ''
   return `${TAG} The user asked to be quizzed on ${subject.what}. Read it first: ${subject.howToRead}
 
@@ -178,7 +202,7 @@ Files: ${subject.files} ${plural(subject.files, 'file')}, about ${subject.lines}
 ${subjectReading(subject)}
 
 Then quiz the user:
-${quizInstructions(count, perspective, { requested: true })}`
+${quizInstructions(count, style, { requested: true })}`
 }
 
 // The reply to a quiz round whose length breaks the settings.

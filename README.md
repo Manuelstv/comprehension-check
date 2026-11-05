@@ -130,6 +130,11 @@ You choose the **perspective** the questions take (see [Settings](#settings)):
 | **Architecture** | How it fits: why this design over an alternative, coupling, where state lives, blast radius, behavior under load or partial failure |
 | **Product** | What it means for users: what they see differently, who is affected, defaults and scope chosen for them, how you would know it works |
 
+By default the quiz uses **plain wording**, so your time goes into the answer, not into working out the question:
+short one-idea sentences, one ask per question, numbers that say what they are ("a price of 10 at 9:00"), and any
+status code or term explained where it appears. The questions are just as hard; only the reading is easier. The
+scorecard feedback is written the same way. Set **Wording** to **Standard** for precise technical wording instead.
+
 After you answer, Claude grades each question and shows a **scorecard**:
 
 - **Score.** Your percentage counts up next to a bar in the colour of your result. Correct answers score 1 and partly correct answers ½.
@@ -156,6 +161,7 @@ Claude makes no edits during the quiz. If one of your answers shows a real bug, 
 | `/quiz settings max <1-99>` | The most questions a quiz may have (default 4). `questions <n>` still works. |
 | `/quiz settings length claude\|size` | How the number of questions is chosen: Claude decides (the default), or it fits the size of the change. `count agent\|size` still works. |
 | `/quiz settings perspective mixed\|code\|architect\|product` | The angle the questions take (default mixed). `lens` and `view` work too, as do `architecture`, `dev` and `pm`. |
+| `/quiz settings wording plain\|standard` | How the quiz is written (default plain). `words` works too, as do `simple` and `technical`. |
 | `/quiz version` | Show the installed version, and whether a newer one is out |
 | `/quiz update` | Update the mod to the latest version, then tell you to run `/reload-plugins` |
 
@@ -173,21 +179,23 @@ including changes made through shell commands, which the automatic quiz misses. 
 
 ### Settings
 
-`/quiz settings` opens one list of every setting with its current value, as `/config` does:
+`/quiz settings` lists the settings with their current values, as `/config` does. A dialog holds at most 4 options,
+so the list comes in two pages:
 
 ```text
 Enter changes the setting you pick; Esc when done. Length now: Claude weighs how severe and complex the change is.
-❯ 1. Sound: On
-  2. Max questions: 4
-  3. Length: Claude decides
-  4. Perspective: Mixed
+❯ 1. Sound: On                         ❯ 1. Perspective: Mixed
+  2. Max questions: 4                    2. Wording: Plain
+  3. Length: Claude decides              3. Back
+  4. More settings…
 ```
 
-- **↑ ↓** move, **Enter** changes the setting in place, and the list comes back with the new value.
-- **Sound** and **Length** switch on Enter.
+- **↑ ↓** move, **Enter** changes the setting in place, and the list comes back, on the same page, with the new value.
+- **More settings…** opens the second page; **Back** returns to the first.
+- **Sound**, **Length** and **Wording** switch on Enter.
 - **Max questions** asks for a number: pick 2, 4, 6 or 8, or type any number from 1 to 99 under **Other**.
 - **Perspective** lists Mixed, Code, Architecture and Product, each with what it asks about.
-- **Esc** closes it. A dialog holds at most 4 options, so there is no Done row.
+- **Esc** closes it.
 
 Each setting can also be set in one line, as in the table above. Settings persist across sessions.
 
@@ -197,6 +205,7 @@ Each setting can also be set in one line, as in the table above. Settings persis
 | **Max questions** | 1–99. No quiz has more. | 4 |
 | **Length** | **Claude decides**: Claude weighs how severe and complex the change is and picks how many. **Fits change size**: 1 question per 100 changed lines. Both stay within the max. | Claude decides |
 | **Perspective** | **Mixed**, **Code**, **Architecture**, **Product** (see [Usage](#usage)) | Mixed |
+| **Wording** | **Plain**: short sentences and everyday words. **Standard**: precise technical wording, as dense as the change calls for. | Plain |
 
 With **Fits change size**, 1–100 changed lines get 1 question, 101–200 get 2, and so on, up to your max.
 If you press Esc during a later round of a long quiz, Claude asks no more and grades the rounds you answered.
@@ -249,7 +258,7 @@ The hooks module's entry point is [`hooks/register.tsx`](hooks/register.tsx). It
 To add an on-demand scope, add one entry to `SCOPE_DEFINITIONS` in `hooks/scopes/scopes.ts` and a case to `snapshotOf` in `hooks/scopes/collectScope.ts`.
 TypeScript then points to every `switch` on the scope kind that needs a case.
 
-To add a setting, add one entry to `SETTING_DEFINITIONS` in `hooks/settings/definitions.ts`. The command line, the menu and the summary all pick it up. A setting with `choices` gets a picker in the menu. The menu holds at most 4 settings, because a dialog holds at most 4 options.
+To add a setting, add one entry to `SETTING_DEFINITIONS` in `hooks/settings/definitions.ts`. The command line, the menu and the summary all pick it up. A setting with `choices` gets a picker in the menu. Past 4 settings the menu pages itself (`menuPages` in `settingsMenu.ts`): 3 settings a page and a row to the next.
 
 Two rules of the mod loader shape the code:
 
@@ -318,7 +327,7 @@ So check any flow that depends on when events fire in a live session, as well as
 
 The tests check the code. The [evals](evals/README.md) check the **prompt**: they run real models and score the quizzes Claude writes.
 Each property is graded on its own: grounded in the change, critical rather than trivia, a question about a decision Claude made,
-fair options, the chosen perspective, and fair grading.
+fair options, the chosen perspective, plain wording, and fair grading.
 
 ```
 bun scripts/build-evals.ts --check   # the generated eval prompts match hooks/quiz/prompts.ts

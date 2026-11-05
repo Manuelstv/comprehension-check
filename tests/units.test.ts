@@ -15,7 +15,7 @@ import {
   questionCountFor,
   questionsForSize,
 } from '../hooks/quiz/questionCount'
-import { LENSES, QUIZ_GOAL, quizInstructions, requestedQuizNote } from '../hooks/quiz/prompts'
+import { LENSES, PLAIN_WORDING, QUIZ_GOAL, quizInstructions, requestedQuizNote } from '../hooks/quiz/prompts'
 import { QuizRequest } from '../hooks/quiz/quizRequest'
 import { QuizRounds } from '../hooks/quiz/quizRounds'
 import { TurnReminders } from '../hooks/quiz/turnReminders'
@@ -26,6 +26,7 @@ import { requestSummary, subjectOf } from '../hooks/scopes/scopeText'
 import { SCOPES_USAGE, describeScope, parseScope } from '../hooks/scopes/scopes'
 import { SETTING_DEFINITIONS } from '../hooks/settings/definitions'
 import { SETTINGS_USAGE } from '../hooks/settings/settings'
+import { menuPages, pageRow } from '../hooks/settings/settingsMenu'
 import { fileListLine, fitRows } from '../hooks/ui/bannerLines'
 
 test('semver: later versions are newer, a pre-release is below its release', async () => {
@@ -69,19 +70,22 @@ test('size mode: 1 question per 100 changed lines, at least 1, never above the m
   expect(questionsForSize(900, 12)).toBe(9)
 })
 
+// Settings as stored by default; tests override what they are about.
+const SETTINGS = { sound: true, maxQuestions: 4, sizing: 'agent', perspective: 'mixed', wording: 'plain' } as const
+
 test('question count follows the settings, and a quiz round must fit it', async () => {
   const changes = new Map([['/a.ts', 150]])
-  const sized = questionCountFor({ sound: true, maxQuestions: 4, sizing: 'size' }, changes)
+  const sized = questionCountFor({ ...SETTINGS, maxQuestions: 4, sizing: 'size' }, changes)
   expect(sized).toEqual({ mode: 'size', exact: 2, files: 1, lines: 150 })
   expect(fitsQuestionCount(sized, 2)).toBe(true)
   expect(fitsQuestionCount(sized, 1)).toBe(false)
 
-  const agent = questionCountFor({ sound: true, maxQuestions: 3, sizing: 'agent' }, changes)
+  const agent = questionCountFor({ ...SETTINGS, maxQuestions: 3, sizing: 'agent' }, changes)
   expect(fitsQuestionCount(agent, 3)).toBe(true)
   expect(fitsQuestionCount(agent, 4)).toBe(false)
   expect(mayNeedRounds(agent)).toBe(false)
 
-  const long = questionCountFor({ sound: true, maxQuestions: 10, sizing: 'agent' }, changes)
+  const long = questionCountFor({ ...SETTINGS, maxQuestions: 10, sizing: 'agent' }, changes)
   expect(fitsQuestionCount(long, 4, 4)).toBe(true)
   expect(fitsQuestionCount(long, 3, 8)).toBe(false)
   expect(fitsQuestionCount(long, 5)).toBe(false)
@@ -176,13 +180,13 @@ test('perspective: parsed from its aliases, stepped round, read back from the st
 // actually be in the text Claude gets. evals/ checks what Claude does with it.
 test('quiz instructions: goal first, the chosen lens only, and the critical-thinking rules', async () => {
   const agent = { mode: 'agent' as const, max: 4 }
-  const mixed = quizInstructions(agent, 'mixed')
+  const mixed = quizInstructions(agent, { perspective: 'mixed', wording: 'standard' })
   expect(mixed).toContain(QUIZ_GOAL)
   for (const lens of Object.values(LENSES)) expect(mixed).toContain(`${lens.name} (${lens.focus})`)
   expect(mixed).toContain('use at least two lenses')
 
   for (const [key, lens] of Object.entries(LENSES)) {
-    const text = quizInstructions(agent, key as keyof typeof LENSES)
+    const text = quizInstructions(agent, { perspective: key as keyof typeof LENSES, wording: 'standard' })
     expect(text).toContain(`Perspective: ${lens.name}.`)
     for (const angle of lens.angles) expect(text).toContain(angle)
     for (const other of Object.values(LENSES).filter(l => l !== lens)) expect(text).not.toContain(other.angles[0]!)
@@ -200,7 +204,7 @@ test('quiz instructions: goal first, the chosen lens only, and the critical-thin
     expect(mixed).toContain(rule)
   }
   expect(mixed).toContain('{"source": "comprehension-check"}')
-  expect(quizInstructions({ mode: 'agent', max: 10 }, 'code')).toContain('rounds of 4')
+  expect(quizInstructions({ mode: 'agent', max: 10 }, { perspective: 'code', wording: 'standard' })).toContain('rounds of 4')
 })
 
 test('settings: ←/→ steps each value, the max within 1-99', async () => {
@@ -323,7 +327,7 @@ test('scope text: commits named, how to read them, files largest first', async (
 })
 
 test('scope text: the summary follows the length setting and the perspective', async () => {
-  const settings = { sound: true, maxQuestions: 3, sizing: 'agent' as const, perspective: 'product' as const }
+  const settings = { ...SETTINGS, maxQuestions: 3, perspective: 'product' as const }
   expect(requestSummary(snapshot(), { mode: 'agent', max: 3 }, settings)).toBe(
     '🧠 Quiz on the last 2 commits: 2 files, 121 lines · up to 3 questions · Product perspective.',
   )
@@ -332,7 +336,7 @@ test('scope text: the summary follows the length setting and the perspective', a
 })
 
 test('requested quiz note: the scope, how to read it, then the quiz rules without the yes/no step', async () => {
-  const note = requestedQuizNote(subjectOf(snapshot()), { mode: 'agent', max: 4 }, 'code')
+  const note = requestedQuizNote(subjectOf(snapshot()), { mode: 'agent', max: 4 }, { perspective: 'code', wording: 'plain' })
   expect(note).toContain('[comprehension-check] The user asked to be quizzed on the last 2 commits')
   expect(note).toContain('- src/a.ts (120 lines)')
   expect(note).toContain('"the change" means this diff')
@@ -340,8 +344,48 @@ test('requested quiz note: the scope, how to read it, then the quiz rules withou
   expect(note).not.toContain('first asks the user whether they want the quiz')
   expect(note).toContain('Perspective: Code')
 
-  const whole = requestedQuizNote(subjectOf(snapshot({ scope: { kind: 'codebase' }, commits: [] })), { mode: 'agent', max: 4 }, 'mixed')
+  const whole = requestedQuizNote(subjectOf(snapshot({ scope: { kind: 'codebase' }, commits: [] })), { mode: 'agent', max: 4 }, SETTINGS)
   expect(whole).toContain('not on a recent change')
   // The gated quiz still reads as before, so the evals stay in step.
-  expect(quizInstructions({ mode: 'agent', max: 4 }, 'mixed')).toContain('first asks the user whether they want the quiz')
+  expect(quizInstructions({ mode: 'agent', max: 4 }, SETTINGS)).toContain('first asks the user whether they want the quiz')
+})
+
+// ─── Wording ─────────────────────────────────────────────────────────────────
+
+test('wording: plain by default, parsed from its aliases, toggled, read back from the store', async () => {
+  const wording = SETTING_DEFINITIONS.find(def => def.key === 'wording')!
+  expect(wording.defaultValue).toBe('plain')
+  expect(wording.parse('simple')).toBe('plain')
+  expect(wording.parse('technical')).toBe('standard')
+  expect(wording.parse('fancy')).toBeUndefined()
+  expect(wording.step('plain', 1)).toBe('standard')
+  expect(wording.step('standard', 1)).toBe('plain')
+  expect(wording.fromStore('standard')).toBe('standard')
+  expect(wording.fromStore('loud')).toBeUndefined()
+  expect(SETTINGS_USAGE).toContain('/quiz settings wording plain|standard')
+})
+
+test('quiz instructions: plain wording adds its rule after the perspective; standard adds none', async () => {
+  const agent = { mode: 'agent' as const, max: 4 }
+  const plain = quizInstructions(agent, { perspective: 'code', wording: 'plain' })
+  const standard = quizInstructions(agent, { perspective: 'code', wording: 'standard' })
+  expect(plain).toContain(`4. ${PLAIN_WORDING}`)
+  expect(standard).not.toContain('Wording: plain')
+  for (const rule of ['about 40 words in all', 'say what each number is', 'keep each question anchored', 'asks ONE thing', 'explain a term again in every question that uses it', 'say what it means in a few words', 'no double negatives', 'write NOT in capitals', 'in the scorecard, the same plain words', 'keep the reasoning just as hard']) {
+    expect(plain).toContain(rule)
+  }
+  // Every other rule is still there, numbered on from the wording rule.
+  expect(plain).toContain('5. Every question must:')
+  expect(standard).toContain('4. Every question must:')
+  expect(plain).toContain('10. Do not edit any files during the quiz')
+})
+
+test('settings menu pages: one page when the settings fit a dialog, else 3 a page and a row on', async () => {
+  expect(menuPages([1, 2, 3, 4])).toEqual([[1, 2, 3, 4]])
+  expect(menuPages([1, 2, 3, 4, 5])).toEqual([[1, 2, 3], [4, 5]])
+  expect(menuPages([1, 2, 3, 4, 5, 6, 7])).toEqual([[1, 2, 3], [4, 5, 6], [7]])
+  expect(pageRow(0, 1)).toBeUndefined()
+  expect(pageRow(0, 2)).toBe('More settings…')
+  expect(pageRow(1, 2)).toBe('Back')
+  expect(pageRow(1, 3)).toBe('More settings…')
 })

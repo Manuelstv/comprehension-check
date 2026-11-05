@@ -1,8 +1,12 @@
-// The settings menu, as /config works: one list of every setting with its
-// value; ↑↓ moves, Enter changes the one picked in place, and the list comes
-// back with the new value until Esc. Sound and Length switch on Enter;
-// Max questions asks for a number; a setting with `choices` (Perspective)
-// lists them to pick from. Each dialog is a plain `$.ui.ask`.
+// The settings menu, as /config works: a list of the settings with their
+// values; ↑↓ moves, Enter changes the one picked in place, and the list comes
+// back with the new value until Esc. Sound, Length and Wording switch on
+// Enter; Max questions asks for a number; a setting with `choices`
+// (Perspective) lists them to pick from. Each dialog is a plain `$.ui.ask`.
+//
+// A dialog holds at most 4 options, so past 4 settings the list comes in
+// pages (`menuPages`): 3 settings and "More settings…", the last page with
+// "Back" to the first.
 
 import type { EngineInterface } from 'claude-code'
 
@@ -21,6 +25,22 @@ async function askOrDismiss($: MenuHost, question: string, header: string, optio
   } catch {
     return undefined
   }
+}
+
+// The settings on each page: all of them when they fit one dialog, else
+// pages of `perDialog - 1`, leaving a row to move between pages.
+export const menuPages = <T>(items: readonly T[], perDialog: number = QUESTION_LIMITS.perDialog): T[][] => {
+  if (items.length <= perDialog) return [[...items]]
+  const pages: T[][] = []
+  for (let at = 0; at < items.length; at += perDialog - 1) pages.push(items.slice(at, at + perDialog - 1))
+  return pages
+}
+
+// The row that moves on from `page`: none on a single page, "Back" on the
+// last, "More settings…" before it.
+export const pageRow = (page: number, pageCount: number): string | undefined => {
+  if (pageCount <= 1) return undefined
+  return page === pageCount - 1 ? SETTINGS_MENU.backRow : SETTINGS_MENU.moreRow
 }
 
 const rowLabel = (def: SettingDefinition, settings: Settings) => `${def.title}: ${def.label(settings[def.key])}`
@@ -53,16 +73,23 @@ async function askChoice($: MenuHost, def: SettingDefinition, current: SettingVa
 
 export async function openSettingsMenu($: MenuHost, ownDialogs: OwnDialogs): Promise<string> {
   let changed = 0
+  const pages = menuPages(SETTING_DEFINITIONS)
+  let page = 0
   await ownDialogs.during(async () => {
     for (let round = 0; round < SETTINGS_MENU.maxRounds; round += 1) {
       const settings = await readSettings($)
-      const rows = SETTING_DEFINITIONS.map(def => ({ def, label: rowLabel(def, settings) }))
+      const rows = (pages[page] ?? []).map(def => ({ def, label: rowLabel(def, settings) }))
+      const turnPage = pageRow(page, pages.length)
       const picked = await askOrDismiss(
         $,
         menuQuestion(settings),
         SETTINGS_MENU.header,
-        rows.map(row => row.label),
+        [...rows.map(row => row.label), ...(turnPage === undefined ? [] : [turnPage])],
       )
+      if (picked !== undefined && picked === turnPage) {
+        page = (page + 1) % pages.length
+        continue
+      }
       // Esc, or anything typed under Other that is not a setting, closes it.
       const def = rows.find(row => row.label === picked)?.def
       if (def === undefined) return

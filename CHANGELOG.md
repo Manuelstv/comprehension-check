@@ -6,6 +6,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- **Plain wording**, on by default. Questions, options and the scorecard feedback are written in short one-idea sentences and everyday words, with one ask per question, numbers that say what they are, and every status code or term explained where it appears. The questions stay just as hard. `/quiz settings wording standard` (or the settings menu) switches back to precise technical wording.
+- **Evals for the wording**: `wording-plain` on a jargon-heavy change, `wording-standard` as its control on the same quality properties, and `grading-plain`. The readability rubrics were checked to pass plain quizzes (4 of 6) and fail standard ones (0 of 3) before being trusted; see `evals/README.md`.
+
+### Changed
+
+- The settings menu comes in pages, since a dialog holds at most 4 options and there are now 5 settings: Sound, Max questions and Length, then **More settings…** for Perspective and Wording, with **Back**.
+
 ## [0.6.0] - 2026-11-05
 
 ### Added

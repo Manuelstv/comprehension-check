@@ -88,7 +88,7 @@ async function recordEdit($: EngineInterface, input: unknown, { changes, reminde
   const settings = await readSettings($)
   const count = questionCountFor(settings, changes.current)
   const note = reminders.noteFor(count)
-  if (note === 'first-edit') await tellClaude($, firstEditNote(count, settings.perspective))
+  if (note === 'first-edit') await tellClaude($, firstEditNote(count, settings))
   if (note === 'change-grew' && count.mode === 'size') await tellClaude($, changeGrewNote(count))
 }
 
@@ -142,6 +142,6 @@ export function registerQuizFlow(on: On, deps: QuizFlowDeps) {
     changes.handToStop(owed)
     const settings = await readSettings($)
     const count = questionCountFor(settings, owed)
-    return { ...result, block: unquizzedStopNote([...owed.keys()], count, settings.perspective) }
+    return { ...result, block: unquizzedStopNote([...owed.keys()], count, settings) }
   })
 }

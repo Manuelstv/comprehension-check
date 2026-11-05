@@ -40,16 +40,11 @@ test('Enter on Sound or Length changes it in place, and the list comes back', as
 
   const r = await $.command.run(quiz('settings'))
   expect(r.text).toContain(
-    'Saved. Quiz settings: sound off · at most 4 questions · length fits the change size · mixed perspective.',
+    'Saved. Quiz settings: sound off · at most 4 questions · length fits the change size · mixed perspective · plain wording.',
   )
 
   expect(asked.map(a => a.header)).toEqual(['Settings', 'Settings', 'Settings'])
-  expect(asked[0]?.options).toEqual([
-    'Sound: On',
-    'Max questions: 4',
-    'Length: Claude decides',
-    'Perspective: Mixed',
-  ])
+  expect(asked[0]?.options).toEqual(['Sound: On', 'Max questions: 4', 'Length: Claude decides', 'More settings…'])
   expect(asked[1]?.options[0]).toBe('Sound: Off')
   expect(asked[0]?.question).toContain('Claude weighs how severe and complex the change is')
   expect(asked[2]?.question).toContain('1 question per 100 changed lines')
@@ -66,19 +61,21 @@ test('Max questions: pick a number, or type one under Other', async ($, on) => {
 })
 
 test('Perspective lists every lens with what it asks, the current one marked', async ($, on) => {
-  const asked = engine(on, ['Perspective: Mixed', 'Product', 'Perspective: Product', 'Architecture', 'Done'])
+  const asked = engine(on, ['More settings…', 'Perspective: Mixed', 'Product', 'Perspective: Product', 'Architecture', 'Done'])
   await $.session.start(START)
 
   const r = await $.command.run(quiz('settings'))
   expect(r.text).toContain('architecture perspective')
-  expect(asked[1]?.header).toBe('Perspective')
-  expect(asked[1]?.options).toEqual(['Mixed (current)', 'Code', 'Architecture', 'Product'])
-  expect(asked[1]?.question).toContain('Product: What it means for users')
-  expect(asked[3]?.options).toContain('Product (current)')
+  expect(asked[2]?.header).toBe('Perspective')
+  expect(asked[2]?.options).toEqual(['Mixed (current)', 'Code', 'Architecture', 'Product'])
+  expect(asked[2]?.question).toContain('Product: What it means for users')
+  // After a change the list comes back on the same page.
+  expect(asked[3]?.options[0]).toBe('Perspective: Product')
+  expect(asked[4]?.options).toContain('Product (current)')
 })
 
 test('Perspective: a lens typed under Other is understood; nonsense changes nothing', async ($, on) => {
-  engine(on, ['Perspective: Mixed', 'architect', 'Perspective: Architecture', 'sideways', 'Done'])
+  engine(on, ['More settings…', 'Perspective: Mixed', 'architect', 'Perspective: Architecture', 'sideways', 'Done'])
   await $.session.start(START)
 
   const r = await $.command.run(quiz('settings'))
@@ -101,4 +98,17 @@ test('the settings dialogs do not count as a quiz', async ($, on) => {
   await $.command.run(quiz('settings'))
   const r = await $.classic.Stop({ stop_hook_active: false })
   expect(r.block).toContain('/repo/owed.kt')
+})
+
+test('More settings… opens the second page: Perspective, Wording and Back', async ($, on) => {
+  const asked = engine(on, ['More settings…', 'Wording: Plain', 'Back', 'Done'])
+  await $.session.start(START)
+
+  const r = await $.command.run(quiz('settings'))
+  expect(r.text).toContain('standard wording')
+  expect(asked[1]?.options).toEqual(['Perspective: Mixed', 'Wording: Plain', 'Back'])
+  // Enter switched the wording in place, on the same page.
+  expect(asked[2]?.options).toEqual(['Perspective: Mixed', 'Wording: Standard', 'Back'])
+  // Back returns to the first page.
+  expect(asked[3]?.options[3]).toBe('More settings…')
 })

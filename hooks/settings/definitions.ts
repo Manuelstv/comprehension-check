@@ -2,10 +2,16 @@
 // words that describe it. The command line, the settings menu and the summary
 // all read this table; adding a setting means adding an entry.
 
-import { DEFAULT_SETTINGS, LINES_PER_QUESTION, PERSPECTIVES, QUESTION_LIMITS, STORE_KEYS } from '../config'
-import type { Perspective, Sizing } from '../config'
+import { DEFAULT_SETTINGS, LINES_PER_QUESTION, PERSPECTIVES, QUESTION_LIMITS, STORE_KEYS, WORDINGS } from '../config'
+import type { Perspective, Sizing, Wording } from '../config'
 
-export type Settings = { sound: boolean; maxQuestions: number; sizing: Sizing; perspective: Perspective }
+export type Settings = {
+  sound: boolean
+  maxQuestions: number
+  sizing: Sizing
+  perspective: Perspective
+  wording: Wording
+}
 
 export type SettingValue = Settings[keyof Settings]
 
@@ -150,6 +156,35 @@ const perspective: SettingDefinition<Perspective> = {
   saved: value => `Quiz perspective: ${PERSPECTIVE_TEXT[value].label}. ${PERSPECTIVE_TEXT[value].hint}`,
 }
 
+const WORDING_TEXT: Record<Wording, { label: string; words: readonly string[]; hint: string }> = {
+  plain: {
+    label: 'Plain',
+    words: ['plain', 'simple', 'easy', 'clear'],
+    hint: 'Short sentences and everyday words: your time goes into the answer, not the reading.',
+  },
+  standard: {
+    label: 'Standard',
+    words: ['standard', 'technical', 'precise', 'dense'],
+    hint: 'Precise technical wording, as dense as the change calls for.',
+  },
+}
+
+const wording: SettingDefinition<Wording> = {
+  key: 'wording',
+  storeKey: STORE_KEYS.wording,
+  names: ['wording', 'words', 'language'],
+  usage: 'plain|standard',
+  title: 'Wording',
+  defaultValue: DEFAULT_SETTINGS.wording,
+  label: value => WORDING_TEXT[value].label,
+  hint: value => WORDING_TEXT[value].hint,
+  step: value => (value === 'plain' ? 'standard' : 'plain'),
+  parse: word => WORDINGS.find(w => WORDING_TEXT[w].words.includes(word)),
+  fromStore: stored => WORDINGS.find(w => w === stored),
+  summary: value => `${WORDING_TEXT[value].label.toLowerCase()} wording`,
+  saved: value => `Quiz wording: ${WORDING_TEXT[value].label}. ${WORDING_TEXT[value].hint}`,
+}
+
 const asAny = <V>(def: SettingDefinition<V>) => def as unknown as SettingDefinition
 
 export const SETTING_DEFINITIONS: readonly SettingDefinition[] = [
@@ -157,6 +192,7 @@ export const SETTING_DEFINITIONS: readonly SettingDefinition[] = [
   asAny(maxQuestions),
   asAny(sizing),
   asAny(perspective),
+  asAny(wording),
 ]
 
 export const findSetting = (name: string) =>
