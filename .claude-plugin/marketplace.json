@@ -1,0 +1,6 @@
+{
+  "name": "comprehension-check",
+  "description": "A Claude Code mod that quizzes you on every code change Claude makes.",
+  "owner": { "name": "agharsallah" },
+  "plugins": [{ "name": "comprehension-check", "source": "./" }]
+}
