@@ -6,6 +6,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-05
+
 ### Added
 
 - `/quiz settings` lists every setting with its value, as `/config` does. ↑↓ moves, Enter changes the setting in place, and the list comes back with the new value. Sound and Length switch on Enter; Max questions offers 2, 4, 6 or 8, or any number from 1 to 99 typed under Other. Each setting can also be set in one line: `/quiz settings sound on|off`, `/quiz settings max <1-99>`, `/quiz settings length claude|size`.
@@ -61,7 +63,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Mid-turn reminder plus a `Stop` hook fallback, so the quiz is asked once per turn.
 - `/quiz on|off|status`; the on/off setting persists across sessions.
 
-[Unreleased]: https://github.com/agharsallah/comprehension-check/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/agharsallah/comprehension-check/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/agharsallah/comprehension-check/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/agharsallah/comprehension-check/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/agharsallah/comprehension-check/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/agharsallah/comprehension-check/releases/tag/v0.1.0
