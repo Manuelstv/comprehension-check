@@ -6,6 +6,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- `/quiz settings`: a menu for sound, the max number of questions (2–4) and who decides the count. Each one can also be set in one line: `/quiz settings sound on|off`, `/quiz settings questions 2|3|4`, `/quiz settings count agent|size`.
+- **Count by change size.** With `count size`, the number of questions follows the files touched and the lines changed, up to your max. Claude is told the count, and told again if the change grows. A quiz of the wrong length goes back to Claude before you see it.
+
+### Changed
+
+- Lock files (`pnpm-lock.yaml`, `Cargo.lock`, `*.lock`, …) and git-ignored files no longer count as changes, so editing only those no longer triggers a quiz.
+- With Claude deciding, a quiz longer than your max goes back to Claude before you see it.
+- `/quiz sound on|off` still works, and is now also available as `/quiz settings sound on|off`.
+
 ## [0.3.0] - 2026-11-05
 
 ### Added

@@ -57,10 +57,20 @@ const GRADES = {
 
 type Seen = { gate: string[]; quiz: number }
 
+type EngineOptions = {
+  // Paths `git check-ignore` reports as ignored.
+  ignored?: string[]
+  // Answers to the settings menu, in order; once used up, the menu is dismissed.
+  settings?: string[]
+  // Answers `claude ...` commands (for /quiz update).
+  claude?: (argv: readonly string[]) => { exitCode: number; stdout: string; stderr: string } | 'cannot start'
+}
+
 // Stands for the engine beneath the mod. The gate is the mod's own
 // AskUserQuestion, answered with `gateAnswer`.
-const engine = (on: On, gateAnswer: string | 'dismiss' = 'Yes, quiz me') => {
+const engine = (on: On, gateAnswer: string | 'dismiss' = 'Yes, quiz me', opts: EngineOptions = {}) => {
   const seen: Seen = { gate: [], quiz: 0 }
+  const settingsAnswers = [...(opts.settings ?? [])]
   on('tool.call', (_, e) => {
     if (e.tool === 'AskUserQuestion') {
       const qs = (e as { questions: { question: string; header: string }[] }).questions
@@ -69,9 +79,25 @@ const engine = (on: On, gateAnswer: string | 'dismiss' = 'Yes, quiz me') => {
         if (gateAnswer === 'dismiss') return { deny: 'dismissed' }
         return { result: { questions: qs, answers: { [qs[0].question]: gateAnswer } } }
       }
+      if (['Settings', 'Sound', 'Questions', 'Count'].includes(qs[0]?.header ?? '')) {
+        const picked = settingsAnswers.shift()
+        if (picked === undefined) return { deny: 'dismissed' }
+        return { result: { questions: qs, answers: { [qs[0]?.question ?? '']: picked } } }
+      }
       seen.quiz += 1
     }
     return { result: {} }
+  })
+  on('process.run', (_, e) => {
+    if (e.argv[0] === 'claude') {
+      const out = opts.claude?.(e.argv) ?? 'cannot start'
+      return out === 'cannot start'
+        ? { deny: 'CLI only' }
+        : { value: { ...out, isStdoutTruncated: false, isStderrTruncated: false } }
+    }
+    const path = e.argv[e.argv.length - 1] ?? ''
+    const exitCode = opts.ignored?.includes(path) === true ? 0 : 1
+    return { value: { exitCode, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
   })
   on('classic.Stop', () => ({}))
   on('tool.register', (_, e) => ({ value: { tool: `mcp__comprehension-check__${e.name}` } }))
@@ -239,18 +265,18 @@ const updateWorld = (
       ? { deny: 'offline' }
       : { value: { status: 200, ok: true, headers: {}, text: manifest(opts.latest ?? '0.3.0') } },
   )
-  on('process.run', (_, e) => {
-    if (opts.noProcess === true) return { deny: 'CLI only' }
-    ran.push(e.argv.join(' '))
+  const claude = (argv: readonly string[]) => {
+    if (opts.noProcess === true) return 'cannot start' as const
+    ran.push(argv.join(' '))
     const code = opts.exitCode ?? 0
-    return { value: { exitCode: code, stdout: '', stderr: code === 0 ? '' : 'boom: not installed\n' } }
-  })
-  return { ran }
+    return { exitCode: code, stdout: '', stderr: code === 0 ? '' : 'boom: not installed\n' }
+  }
+  return { ran, claude }
 }
 
 test('/quiz version shows the installed version and a newer one', async ($, on) => {
-  engine(on)
-  updateWorld(on, { installed: '0.2.0', latest: '0.3.0' })
+  const world = updateWorld(on, { installed: '0.2.0', latest: '0.3.0' })
+  engine(on, 'Yes, quiz me', { claude: world.claude })
   await $.session.start(START)
 
   const r = await $.command.run({ command: 'quiz', args: 'version', ...RUN })
@@ -259,15 +285,15 @@ test('/quiz version shows the installed version and a newer one', async ($, on) 
 })
 
 test('/quiz version says when it is current, or when it cannot check', async ($, on) => {
-  engine(on)
-  updateWorld(on, { installed: '0.3.0', latest: '0.3.0' })
+  const world = updateWorld(on, { installed: '0.3.0', latest: '0.3.0' })
+  engine(on, 'Yes, quiz me', { claude: world.claude })
   await $.session.start(START)
   expect((await $.command.run({ command: 'quiz', args: 'version', ...RUN })).text).toContain('latest version')
 })
 
 test('/quiz version offline still shows the installed version', async ($, on) => {
-  engine(on)
-  updateWorld(on, { latest: 'offline' })
+  const world = updateWorld(on, { latest: 'offline' })
+  engine(on, 'Yes, quiz me', { claude: world.claude })
   await $.session.start(START)
   const r = await $.command.run({ command: 'quiz', args: 'version', ...RUN })
   expect(r.text).toContain('v0.2.0')
@@ -275,8 +301,9 @@ test('/quiz version offline still shows the installed version', async ($, on) =>
 })
 
 test('/quiz update refreshes the marketplace, then updates the mod', async ($, on) => {
-  engine(on)
-  const { ran } = updateWorld(on, { installed: '0.2.0', latest: '0.3.0' })
+  const world = updateWorld(on, { installed: '0.2.0', latest: '0.3.0' })
+  engine(on, 'Yes, quiz me', { claude: world.claude })
+  const { ran } = world
   await $.session.start(START)
 
   const r = await $.command.run({ command: 'quiz', args: 'update', ...RUN })
@@ -289,8 +316,9 @@ test('/quiz update refreshes the marketplace, then updates the mod', async ($, o
 })
 
 test('/quiz update does nothing when already current', async ($, on) => {
-  engine(on)
-  const { ran } = updateWorld(on, { installed: '0.3.0', latest: '0.3.0' })
+  const world = updateWorld(on, { installed: '0.3.0', latest: '0.3.0' })
+  engine(on, 'Yes, quiz me', { claude: world.claude })
+  const { ran } = world
   await $.session.start(START)
 
   const r = await $.command.run({ command: 'quiz', args: 'update', ...RUN })
@@ -299,8 +327,9 @@ test('/quiz update does nothing when already current', async ($, on) => {
 })
 
 test('/quiz update reports a failed step and stops', async ($, on) => {
-  engine(on)
-  const { ran } = updateWorld(on, { exitCode: 1 })
+  const world = updateWorld(on, { exitCode: 1 })
+  engine(on, 'Yes, quiz me', { claude: world.claude })
+  const { ran } = world
   await $.session.start(START)
 
   const r = await $.command.run({ command: 'quiz', args: 'update', ...RUN })
@@ -310,12 +339,118 @@ test('/quiz update reports a failed step and stops', async ($, on) => {
 })
 
 test('/quiz update without a host shell gives the manual commands', async ($, on) => {
-  engine(on)
-  updateWorld(on, { noProcess: true })
+  const world = updateWorld(on, { noProcess: true })
+  engine(on, 'Yes, quiz me', { claude: world.claude })
   await $.session.start(START)
 
   const r = await $.command.run({ command: 'quiz', args: 'update', ...RUN })
   expect(r.text).toContain('Update from a shell')
+})
+
+const settingsCmd = (args: string) => ({ command: 'quiz', args: `settings ${args}`.trim(), ...RUN })
+
+test('lock files and git-ignored files never call for a quiz', async ($, on) => {
+  const { session } = engine(on, 'Yes, quiz me', { ignored: ['/repo/dist/bundle.js'] })
+
+  await $.tool.call({ tool: 'Write', file_path: '/repo/pnpm-lock.yaml', content: 'lockfileVersion: 9' })
+  await $.tool.call({ tool: 'Write', file_path: '/repo/sub/Cargo.lock', content: 'x' })
+  await $.tool.call({ tool: 'Write', file_path: '/repo/dist/bundle.js', content: 'x' })
+
+  expect(noteTexts(session).length).toBe(0)
+  const r = await $.classic.Stop({ stop_hook_active: false })
+  expect(r.block).toBeUndefined()
+})
+
+test('settings are set by words and shown when the dialog is dismissed', async ($, on) => {
+  engine(on)
+  await $.session.start(START)
+
+  expect((await $.command.run(settingsCmd('questions 3'))).text).toContain('at most 3')
+  expect((await $.command.run(settingsCmd('count size'))).text).toContain('size of the change')
+  expect((await $.command.run(settingsCmd('sound off'))).text).toContain('off')
+  expect((await $.command.run(settingsCmd('questions 9'))).text).toContain('Unknown setting')
+
+  const shown = await $.command.run(settingsCmd(''))
+  expect(shown.text).toContain('No changes')
+  expect(shown.text).toContain('sound off · at most 3 questions · count by change size')
+})
+
+test('the settings dialog saves what the user picks', async ($, on) => {
+  engine(on, 'Yes, quiz me', {
+    settings: ['Sound: on', 'Off', 'Max questions: 4', '2', 'Count: Claude decides', 'By change size', 'Done'],
+  })
+  await $.session.start(START)
+
+  const r = await $.command.run(settingsCmd(''))
+  expect(r.text).toContain('Saved')
+  expect(r.text).toContain('sound off · at most 2 questions · count by change size')
+})
+
+test('the settings dialog does not count as a quiz', async ($, on) => {
+  engine(on, 'Yes, quiz me', { settings: ['Sound: on', 'On', 'Done'] })
+  await $.session.start(START)
+
+  await $.tool.call({ ...EDIT, file_path: '/repo/settings-owed.kt' })
+  await $.command.run(settingsCmd(''))
+
+  const r = await $.classic.Stop({ stop_hook_active: false })
+  expect(r.block).toContain('/repo/settings-owed.kt')
+})
+
+test('/quiz sound still works as before', async ($, on) => {
+  engine(on)
+  await $.session.start(START)
+  expect((await $.command.run({ command: 'quiz', args: 'sound off', ...RUN })).text).toContain('off')
+})
+
+test('Claude decides up to the max, and a longer quiz is sent back', async ($, on) => {
+  const { seen, session } = engine(on)
+  await $.session.start(START)
+  await $.command.run(settingsCmd('questions 2'))
+
+  await $.tool.call({ ...EDIT, file_path: '/repo/max.kt' })
+  expect(noteTexts(session)[0]).toContain('with 2 questions')
+
+  const three = { ...QUIZ, questions: [...QUIZ.questions, ...QUIZ.questions.slice(0, 1)] }
+  const ran = await $.tool.call(three)
+  expect(ran.deny).toContain('at most 2')
+  expect(seen.gate.length).toBe(0)
+
+  expect((await $.tool.call(QUIZ)).deny).toBeUndefined()
+  expect(seen.quiz).toBe(1)
+})
+
+test('by change size, the count grows with the files and lines changed', async ($, on) => {
+  const { seen, session } = engine(on)
+  await $.session.start(START)
+  await $.command.run(settingsCmd('count size'))
+
+  await $.tool.call({ ...EDIT, file_path: '/repo/s1.kt' })
+  expect(noteTexts(session)[0]).toContain('exactly 2 questions')
+
+  await $.tool.call({ ...EDIT, file_path: '/repo/s2.kt' })
+  await $.tool.call({ ...EDIT, file_path: '/repo/s3.kt' })
+  const notes = noteTexts(session)
+  expect(notes.length).toBe(2)
+  expect(notes[1]).toContain('ask exactly 3 questions')
+
+  // Two questions is now too few: back to Claude, the user not asked.
+  const ran = await $.tool.call(QUIZ)
+  expect(ran.deny).toContain('exactly 3')
+  expect(seen.gate.length).toBe(0)
+})
+
+test('by change size, a big diff in one file asks the max, and the Stop note says so', async ($, on) => {
+  engine(on)
+  await $.session.start(START)
+  await $.command.run(settingsCmd('count size'))
+
+  const big = Array.from({ length: 300 }, (_, i) => `line ${i}`).join('\n')
+  await $.tool.call({ tool: 'Write', file_path: '/repo/big.kt', content: big })
+
+  const r = await $.classic.Stop({ stop_hook_active: false })
+  expect(r.block).toContain('exactly 4 questions')
+  expect(r.block).toContain('about 300 lines')
 })
 
 // Core's own drawing: the dialog must hold it exactly once.
