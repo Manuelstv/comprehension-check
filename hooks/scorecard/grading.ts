@@ -12,6 +12,8 @@ export type GradedQuestion = {
   user_answer?: string
   correct_answer?: string
   ref?: string
+  // A real bug or risk in the change that this question brought to light.
+  finding?: string
 }
 
 export type QuizResults = { results: GradedQuestion[]; next_step?: string }
@@ -35,10 +37,15 @@ export const parseResults = (input: unknown): QuizResults | undefined => {
       user_answer: nonEmptyString(item.user_answer),
       correct_answer: nonEmptyString(item.correct_answer),
       ref: nonEmptyString(item.ref),
+      finding: nonEmptyString(item.finding),
     })
   }
   return results.length === 0 ? undefined : { results, next_step: nonEmptyString(rec.next_step) }
 }
+
+// The questions that brought a real problem in the change to light.
+export const findingsOf = (results: readonly GradedQuestion[]) =>
+  results.flatMap((r, i) => (r.finding === undefined ? [] : [{ n: i + 1, finding: r.finding }]))
 
 export const scoreOf = (results: readonly GradedQuestion[]) => {
   const points = results.reduce((sum, r) => sum + VERDICTS[r.verdict].points, 0)
@@ -65,6 +72,11 @@ export const RESULTS_SCHEMA = {
           punchline: { type: 'string', description: 'One punchy line, 12 words max' },
           explanation: { type: 'string', description: '1-2 sentences: the why and the misconception' },
           ref: { type: 'string', description: 'file:line, when useful' },
+          finding: {
+            type: 'string',
+            description:
+              'Only when this question exposed a real bug or risk in the change itself: one line naming it and the input that triggers it',
+          },
         },
         required: ['question', 'verdict', 'punchline', 'explanation'],
       },

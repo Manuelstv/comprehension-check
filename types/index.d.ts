@@ -5,7 +5,8 @@ export type Gate = { files: string[]; questions: number }
 export type Anim = { id: string; frame: number }
 
 // Lifetime stats as they stood when a scorecard was drawn.
-export type CardStats = { streak: number; average: number; quizzes: number; best: number }
+// `recent`: the latest scores, oldest first; absent on cards drawn before it existed.
+export type CardStats = { streak: number; average: number; quizzes: number; best: number; recent?: readonly number[] }
 
 declare module 'claude-code' {
   interface PluginState {

@@ -82,7 +82,8 @@ Do this now:
    - user_answer: what they picked or wrote, short; correct_answer: the right answer, short,
    - punchline: ONE punchy line, 12 words max, vivid and specific to their answer. Praise a hit with energy ("Nailed it: the guard stops the double fire."); name a miss plainly ("Close, but reload wipes module vars, not the store."). No generic filler like "Great job!",
    - explanation: 1-2 tight sentences with the why, tied to the code, and the misconception if any. If their answer exposes a risk you missed, say so here instead of defending the change,
-   - ref: file:line where it lives, when useful.
+   - ref: file:line where it lives, when useful,
+   - finding: ONLY when the question, or the user's answer, exposed a real bug or risk in the change itself: one line naming it and the input that triggers it. Leave it out otherwise; the scorecard flags every finding as a problem to fix.
    Also give next_step: one concrete action for their biggest gap (a line to read, a check to run, an input to try), never just "review the code".
    The scorecard IS the feedback: do not repeat it in your own text. After the tool returns, write at most one short line. If mcp__comprehension-check__quiz_results is not available, give the same feedback as short text instead.
 9. Do not edit any files during the quiz. If an answer exposes a real problem in the change, say so and propose a fix, but wait for the user's go-ahead.

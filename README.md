@@ -40,27 +40,35 @@ single choice (◉) in blue, checkboxes (☑) in purple with **pick ALL** in bol
 No answer is marked. Esc skips.
 ```
 
-**3. The scorecard.** It shows your score with a count-up bar, a punchy line for each answer and confetti when you do well.
+**3. The scorecard.** The bar maps the quiz, one block per question in its verdict's colour, so you see at a glance which ones you missed.
+A miss sets your answer against the right one; a right answer stays short. A real bug the quiz found in the change is flagged ⚠.
 
 ```
 ╭──────────────────────────────────────────────────────────────────────╮
 │ ✦✧*·+·★✶✦✧*·+·★✶✦✧*·+·★✶✦✧*·                                         │
-│ 🔥  83% ████████████████████░░░░ 2.5/3                                │
+│ 🔥  83% ███████ ▓▓▓▓▓▓▓ ███████ 2.5/3                                 │
 │ Sharp! Barely a scratch.                                             │
 │                                                                      │
 │ ✅ Q1 · Why the gate Correct                                          │
 │    Nailed it: one hook catches both paths.                           │
-│    You said: Intercept the quiz call                                 │
 │    Gating the quiz call covers the reminder and the Stop fallback.   │
 │    ↳ hooks/register.tsx:318                                          │
 │                                                                      │
 │ 🟡 Q2 · Skipping the gate Partly                                      │
 │    Half there: it also wipes the owed files.                         │
-│    You said: Turn ends  ·  Answer: Turn ends, files cleared          │
+│    ◐ You    Turn ends                                                │
+│    ✓ Answer Turn ends, files cleared                                 │
 │    Without clearing, the Stop hook would push Claude straight back.  │
+│    ⚠ In the code: a second skip in one turn leaves files owed.       │
 │                                                                      │
+│ ✅ Q3 · What the test misses Correct                                  │
+│    Spot on: it never answers the gate twice.                         │
+│    Each test answers once, so a double gate goes unseen.             │
+│                                                                      │
+│ ⚠ A real problem in the change (Q2). Ask Claude to fix it.           │
 │ ➜ Next: Read fitRows and try a 4-question quiz with long headers.    │
 │ 📈 7 quizzes · average 81% · best 100% · streak 3 (80%+ in a row)    │
+│    · last 7 ▅▆▄█▆▇▇                                                  │
 ╰──────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -144,11 +152,12 @@ scorecard feedback is written the same way. Set **Wording** to **Standard** for 
 
 After you answer, Claude grades each question and shows a **scorecard**:
 
-- **Score.** Your percentage counts up next to a bar in the colour of your result. Correct answers score 1 and partly correct answers ½.
+- **Score.** Your percentage counts up while the bar fills. The bar is a map of the quiz: one block per question, in order, `█` green for correct, `▓` amber for partly, `░` red for missed. Correct answers score 1 and partly correct answers ½.
 - **A rating line** that matches the score, from 🏆 *Flawless* to 💥 *Ouch. Time for a slow re-read.*
-- **For each question:** ✅, 🟡 or ❌, a one-line punchline about your answer, what you said next to the right answer, a one- or two-sentence explanation, and the `file:line` it refers to.
+- **For each question:** ✅, 🟡 or ❌ and a one-line punchline about your answer. A miss or partial answer then sets **◐ You** / **✗ You** against **✓ Answer** on aligned lines, followed by a one- or two-sentence explanation. A correct answer skips the comparison and dims its explanation, so the misses stand out. Each ends with the `file:line` it refers to, and wrapped lines stay indented under their question.
+- **Real problems found.** When a question, or your answer, exposed a real bug in the change, the question carries **⚠ In the code:** with the bug and the input that triggers it, and a footer lists those questions so you can ask Claude to fix them.
 - **Effects.** Confetti for 80% or more, a toast with your score, and a short sound (a fanfare for 100%, a chime for 50% or more, a "womp" below that).
-- **Your record:** quizzes taken, average, best score, and your streak of quizzes at 80% or more.
+- **Your record:** quizzes taken, average, best score, your streak of quizzes at 80% or more, and from the second quiz a trend line of your last 10 scores (`▃▅▄▇`). `/quiz stats` shows it too.
 
 Claude makes no edits during the quiz. If one of your answers shows a real bug, Claude proposes a fix and waits for you to approve it.
 

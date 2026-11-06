@@ -22,7 +22,9 @@ import { HUNT_USE, LENSES, PLAIN_WORDING, QUIZ_GOAL, quizInstructions, requested
 import { QuizRequest } from '../hooks/quiz/quizRequest'
 import { QuizRounds } from '../hooks/quiz/quizRounds'
 import { TurnReminders } from '../hooks/quiz/turnReminders'
-import { parseResults, scoreOf, tierFor } from '../hooks/scorecard/grading'
+import { findingsOf, parseResults, scoreOf, tierFor } from '../hooks/scorecard/grading'
+import { verdictBar } from '../hooks/scorecard/scorecardView'
+import { sparkline, statsLine } from '../hooks/scorecard/stats'
 import type { ScopeSnapshot } from '../hooks/scopes/collectScope'
 import { parseLog, parseNumstat, parseNumstatRow, parsePathList } from '../hooks/scopes/gitOutput'
 import { requestSummary, subjectOf } from '../hooks/scopes/scopeText'
@@ -513,3 +515,35 @@ test('banner lines: a long quiz drops its last lines to fit, never the title', a
   expect(lineText(lines[0]!)).toContain('20 questions')
 })
 
+// ─── Scorecard pieces ────────────────────────────────────────────────────────
+
+test('verdict bar: one run per question in order, spaced when there is room, never losing one', async () => {
+  const glyphs = (cells: ReturnType<typeof verdictBar>) => cells.map(c => c.glyph).join('')
+  expect(glyphs(verdictBar(['partial', 'correct', 'incorrect', 'incorrect'], 23))).toBe('▓▓▓▓▓ █████ ░░░░░ ░░░░░')
+  expect(glyphs(verdictBar(['correct'], 10))).toBe('██████████')
+  // Too narrow for spaces: runs touch, the first ones take the spare cells.
+  expect(glyphs(verdictBar(['correct', 'incorrect', 'partial', 'correct'], 10))).toBe('███░░░▓▓██')
+  // More questions than cells: one cell each.
+  expect(verdictBar(Array(12).fill('correct'), 10)).toHaveLength(12)
+})
+
+test('findings: the questions that exposed a real problem, by number', async () => {
+  const parsed = parseResults({
+    results: [
+      { question: 'a', verdict: 'correct', punchline: '', explanation: '' },
+      { question: 'b', verdict: 'incorrect', punchline: '', explanation: '', finding: 'A read at exactly 5 minutes misses.' },
+      { question: 'c', verdict: 'partial', punchline: '', explanation: '', finding: '  ' },
+    ],
+  })
+  expect(findingsOf(parsed!.results)).toEqual([{ n: 2, finding: 'A read at exactly 5 minutes misses.' }])
+})
+
+test('stats: a trend line of recent scores once there are two', async () => {
+  expect(sparkline([0, 50, 100])).toBe('▁▅█')
+  expect(sparkline([-5, 140])).toBe('▁█')
+  const base = { quizzes: 3, average: 42, best: 63, streak: 0 }
+  expect(statsLine({ ...base, recent: [20, 63, 38] })).toContain('last 3 ▂▅▄')
+  expect(statsLine({ ...base, recent: [38] })).not.toContain('last')
+  // Cards drawn before the trend existed have none.
+  expect(statsLine(base)).toBe('3 quizzes · average 42% · best 63% · streak 0 (80%+ in a row)')
+})

@@ -53,6 +53,7 @@ const GRADES = {
       correct_answer: 'C and D',
       punchline: 'Half right: D breaks it too.',
       explanation: 'An empty string skips the check.',
+      finding: 'An empty name skips the guard in a.kt:12.',
     },
   ],
   next_step: 'Read the guard in a.kt.',
@@ -245,6 +246,11 @@ test('the scorecard tool is allowed, scores the quiz and keeps stats', async ($,
   const stats = await $.command.run({ command: 'quiz', args: 'stats', ...RUN })
   expect(stats.text).toContain('1 quiz')
   expect(stats.text).toContain('average 75%')
+  expect(stats.text).not.toContain('last')
+
+  // A second quiz starts the trend line: 75% then 100%.
+  await $.tool.call({ tool: RESULTS_TOOL, results: [GRADES.results[0]] } as never)
+  expect((await $.command.run({ command: 'quiz', args: 'stats', ...RUN })).text).toContain('last 2 ▆█')
 })
 
 test('a scorecard with no valid grades is refused', async ($, on) => {
@@ -609,9 +615,17 @@ test('the scorecard shows the score, verdicts and punchlines', async ($, on) => 
     })
     expect((await ui.find({ type: 'Text', text: /75%/ }))?.text).toContain('1.5/2')
     expect(await ui.find({ type: 'Text', text: /double fire/ })).toBeDefined()
-    expect((await ui.find({ type: 'Text', text: /Answer: C and D/ }))?.text).toContain('You said: C')
+    // A miss sets the user's answer against the right one; a hit does not repeat it.
+    expect(await ui.find({ type: 'Text', text: /◐ You/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^C$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /✓ Answer/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^C and D$/ })).toBeDefined()
+    expect(await ui.findAll({ type: 'Text', text: /You$/ })).toHaveLength(1)
     expect(await ui.find({ type: 'Text', text: /a\.kt:12/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /Read the guard/ })).toBeDefined()
+    // A real bug the quiz found stands out, on its question and in the footer.
+    expect((await ui.find({ type: 'Text', text: /In the code:/ }))?.text).toContain('An empty name skips the guard')
+    expect((await ui.find({ type: 'Text', text: /A real problem in the change/ }))?.text).toContain('(Q2)')
     await ui.unmount()
   }
 })

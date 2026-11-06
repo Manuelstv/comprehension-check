@@ -187,15 +187,26 @@ export const SCORECARD = {
   // The score bar's width: the terminal width less `reserved`, within min..max.
   bar: { min: 10, max: 24, reserved: 40 },
   confetti: { min: 8, max: 28, reserved: 8 },
+  // Recent scores kept for the trend line.
+  trend: 10,
+  // The body of each question, indented under its title so wrapped lines line up.
+  indent: 3,
 } as const
 
 export type Verdict = 'correct' | 'partial' | 'incorrect'
 
-export const VERDICTS: Record<Verdict, { points: number; icon: string; color: string; word: string }> = {
-  correct: { points: 1, icon: '✅', color: 'success', word: 'Correct' },
-  partial: { points: 0.5, icon: '🟡', color: 'warning', word: 'Partly' },
-  incorrect: { points: 0, icon: '❌', color: 'error', word: 'Missed' },
+// `mark`: the verdict on the "You" line; `cell`: its share of the score bar.
+export const VERDICTS: Record<
+  Verdict,
+  { points: number; icon: string; color: string; word: string; mark: string; cell: string }
+> = {
+  correct: { points: 1, icon: '✅', color: 'success', word: 'Correct', mark: '✓', cell: '█' },
+  partial: { points: 0.5, icon: '🟡', color: 'warning', word: 'Partly', mark: '◐', cell: '▓' },
+  incorrect: { points: 0, icon: '❌', color: 'error', word: 'Missed', mark: '✗', cell: '░' },
 }
+
+// The trend line's glyphs, lowest score first.
+export const SPARK_GLYPHS = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'] as const
 
 export type ScoreTier = { minPct: number; emoji: string; color: string; sound: string; lines: readonly string[] }
 
