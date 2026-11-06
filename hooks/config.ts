@@ -264,7 +264,7 @@ export const CONFETTI = {
 
 // ─── Self-update ─────────────────────────────────────────────────────────────
 
-const REPO = 'agharsallah/comprehension-check'
+const REPO = 'Manuelstv/comprehension-check'
 
 export const SELF_UPDATE = {
   // The marketplace serves main, so main's manifest is the latest version.

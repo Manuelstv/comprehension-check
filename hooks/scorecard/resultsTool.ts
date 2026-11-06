@@ -49,7 +49,7 @@ export function registerResultsTool(on: On, rounds: QuizRounds) {
     }
 
     return {
-      result: `Scorecard shown to the user: ${pct}% (${points}/${parsed.results.length}). It already shows every verdict, punchline and explanation, so do not repeat them. Close with at most one short line.`,
+      result: `Scorecard shown to the user: ${pct}% (${points}/${parsed.results.length}). It already shows every verdict, punchline and short explanation, so do not repeat them word for word. If any answer was wrong or partly right, now explain the FIRST such question in detail and in basic words, as a story: the problem, the obvious answer and why it fails, the right answer, and why the user's answer looked right. Name the other missed questions in one line and explain them only when asked. If every answer was correct, close with one short line.`,
     }
   })
 }

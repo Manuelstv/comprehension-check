@@ -167,7 +167,7 @@ export const quizInstructions = (count: QuestionCount, style: QuizStyle, options
    - ref: file:line where it lives, when useful,
    - finding: ONLY when the question, or the user's answer, exposed a real bug or risk in the change itself: one line naming it and the input that triggers it. Leave it out otherwise; the scorecard flags every finding as a problem to fix.
    Also give next_step: one concrete action for their biggest gap (a line to read, a check to run, an input to try), never just "review the code".
-   The scorecard IS the feedback: do not repeat it in your own text. After the tool returns, write at most one short line. If ${RESULTS_TOOL} is not available, give the same feedback as short text instead.`,
+   The scorecard is the short feedback: do not repeat it word for word. After the tool returns, explain in your own text, in detail and in basic words, the FIRST question the user got wrong or partly right. Tell it as a story: what problem the code deals with, the obvious answer and why it fails here, then what the right answer is. Say why their answer looked right. Use everyday words and at most 3 round numbers. End by naming the other missed questions in one line, and explain them only when the user asks. If every answer was correct, write one short line instead. If ${RESULTS_TOOL} is not available, give the same feedback as text instead.`,
     `Do not edit any files during the quiz. If an answer exposes a real problem in the change, say so and propose a fix, but wait for the user's go-ahead.`,
   ])
 
