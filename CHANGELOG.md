@@ -6,6 +6,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-11-06
+
 ### Added
 
 - **A scorecard that teaches.** The bar is now a map of the quiz: one block per question in its verdict's colour (`█` correct, `▓` partly, `░` missed), filling as the score counts up. A miss sets **You** against **Answer** on aligned lines; a correct answer drops the comparison and dims its explanation, so the misses stand out. Wrapped lines stay indented under their question.
@@ -111,7 +113,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Mid-turn reminder plus a `Stop` hook fallback, so the quiz is asked once per turn.
 - `/quiz on|off|status`; the on/off setting persists across sessions.
 
-[Unreleased]: https://github.com/agharsallah/comprehension-check/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/agharsallah/comprehension-check/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/agharsallah/comprehension-check/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/agharsallah/comprehension-check/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/agharsallah/comprehension-check/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/agharsallah/comprehension-check/compare/v0.5.0...v0.6.0
