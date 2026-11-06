@@ -44,6 +44,7 @@ Graders that need judgment are `llm` rubrics, one property per file, so a failur
 | `hidden-decision` | At least one question is about a choice Claude made that the user did not ask for. |
 | `fair-options` | No absurd distractor, no marker and no much longer option singles out the answer. |
 | `lens` | Every question takes the chosen perspective, judged by how it is answered, not by what it mentions. |
+| `corner-case` | (`lens-code`, `lens-architecture`) At least one question puts a real corner case or unwanted behavior of the change to the user as a concrete input or situation to reason through, without announcing it. |
 | `plain-words` | A newcomer to the code reads each question and option in one pass: short one-idea sentences, one ask, numbers that say what they are, terms explained where they appear. At most one question may slip. |
 | `plain-feedback` | The same for the scorecard: punchlines, explanations and `next_step`. |
 
@@ -64,6 +65,21 @@ The first version of `plain-words` required every check to hold for every questi
 plain ones broke 1–2 questions in 4 and standard ones all 4. It also marked a scenario told in several short steps as hard to read, which
 judges the reasoning, not the wording. Both were fixed. If you change either rubric, re-run this check against the `wording-standard` quizzes:
 a rubric the control passes no longer tells the two modes apart.
+
+### Calibrating the corner-case graders
+
+`corner-case` was run against the prompt from before the bug hunt (v0.8.0, same graders) and the prompt with it, 3 runs each:
+
+| Case | Before the hunt | With the hunt |
+| --- | --- | --- |
+| `lens-code` | 1 of 3 pass | 3 of 3 pass |
+| `lens-architecture` | 2 of 3 pass | 3 of 3 pass |
+
+The first version listed the change's headline trade-off (a price up to 5 minutes stale, at checkout or across instances) as a passing
+example. Every quiz asks about that, so the prompt from before the hunt passed it too. The rubric now excludes the headline trade-off and
+counts only a corner case that takes tracing to find: a `now` earlier than the stored time, the cache shared across tests, a rejected
+database read, two first reads at once, unbounded growth, a stampede on expiry. On `lens-architecture` the gap is small: the
+architecture lens already asked about load and partial failure. If you change either rubric, re-run it against v0.8.0's prompt.
 
 ## Why some prompts are generated
 

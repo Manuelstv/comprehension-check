@@ -127,7 +127,7 @@ const PERSPECTIVE_TEXT: Record<Perspective, { label: string; words: readonly str
   code: {
     label: 'Code',
     words: ['code', 'coding', 'dev', 'developer'],
-    hint: 'How it behaves: edge cases, failure paths, what the tests miss.',
+    hint: 'How it behaves: corner cases in the new lines, failure paths, what the tests miss.',
   },
   architecture: {
     label: 'Architecture',

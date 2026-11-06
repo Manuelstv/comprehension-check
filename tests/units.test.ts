@@ -18,7 +18,7 @@ import {
   questionCountFor,
   questionsForSize,
 } from '../hooks/quiz/questionCount'
-import { LENSES, PLAIN_WORDING, QUIZ_GOAL, quizInstructions, requestedQuizNote } from '../hooks/quiz/prompts'
+import { HUNT_USE, LENSES, PLAIN_WORDING, QUIZ_GOAL, quizInstructions, requestedQuizNote } from '../hooks/quiz/prompts'
 import { QuizRequest } from '../hooks/quiz/quizRequest'
 import { QuizRounds } from '../hooks/quiz/quizRounds'
 import { TurnReminders } from '../hooks/quiz/turnReminders'
@@ -207,7 +207,29 @@ test('quiz instructions: goal first, the chosen lens only, and the critical-thin
     expect(mixed).toContain(rule)
   }
   expect(mixed).toContain('{"source": "comprehension-check"}')
+  expect(mixed).toContain('not on code it left as it was')
   expect(quizInstructions({ mode: 'agent', max: 10 }, { perspective: 'code', wording: 'standard' })).toContain('rounds of 4')
+})
+
+// The code and architecture lenses hunt the diff for corner cases first and
+// build a question on what they find; product has no hunt of its own.
+test('quiz instructions: code and architecture hunt for corner cases before writing', async () => {
+  const agent = { mode: 'agent' as const, max: 4 }
+  const textFor = (perspective: 'mixed' | keyof typeof LENSES) => quizInstructions(agent, { perspective, wording: 'standard' })
+  const { code, architecture, product } = LENSES
+
+  expect(textFor('code')).toContain(code.hunt!)
+  expect(textFor('code')).not.toContain(architecture.hunt!)
+  expect(textFor('architecture')).toContain(architecture.hunt!)
+  expect(textFor('architecture')).not.toContain(code.hunt!)
+  expect(product.hunt).toBeUndefined()
+  expect(textFor('product')).not.toContain(HUNT_USE)
+
+  const mixed = textFor('mixed')
+  for (const hunt of [code.hunt!, architecture.hunt!, HUNT_USE]) expect(mixed).toContain(hunt)
+  // Said once, after both hunts.
+  expect(mixed.split(HUNT_USE)).toHaveLength(2)
+  for (const perspective of ['code', 'architecture'] as const) expect(textFor(perspective)).toContain(HUNT_USE)
 })
 
 test('settings: ←/→ steps each value, the max within 1-99', async () => {
@@ -490,3 +512,4 @@ test('banner lines: a long quiz drops its last lines to fit, never the title', a
   expect(lines.length).toBeLessThan(22)
   expect(lineText(lines[0]!)).toContain('20 questions')
 })
+

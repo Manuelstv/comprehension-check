@@ -36,7 +36,9 @@ const howToAsk = (count: QuestionCount): string => {
 export const QUIZ_GOAL = `The goal is the user's critical thinking, not their memory. Code an agent wrote is easy to accept without reading it; the quiz checks that the user still owns this change: they can explain what it does, defend it to whoever will maintain it, and say what it does not cover. Ask what a sharp reviewer would ask before approving it.`
 
 // `elsewhere`: what belongs to the other lenses, kept out of this one.
-type Lens = { name: string; focus: string; elsewhere: string; angles: readonly string[] }
+// `hunt`: what to look for in the diff before writing, so the quiz is built
+// on the corner cases and unwanted behavior the change really has.
+type Lens = { name: string; focus: string; elsewhere: string; angles: readonly string[]; hunt?: string }
 
 // The angles each perspective asks from. `mixed` draws on all three.
 export const LENSES: Record<Exclude<Perspective, 'mixed'>, Lens> = {
@@ -45,11 +47,16 @@ export const LENSES: Record<Exclude<Perspective, 'mixed'>, Lens> = {
     focus: 'how the change behaves, line by line',
     elsewhere: 'system design, deployment and user impact',
     angles: [
-      'the result for a concrete input or edge case that runs through the changed code',
-      'what breaks if a specific line, guard or condition is removed, reordered or inverted',
-      'failure paths: an error, an empty or missing value, a retry, a timeout',
-      'what the tests or checks prove, and which broken case they would still let through',
+      'predict: the exact result of an added or changed line for a concrete input at its edge (empty, missing, zero, negative, a duplicate, exactly at a limit, one past it)',
+      'find the input: which of several concrete inputs make the new code misbehave (a checkbox question fits), or the smallest input that does',
+      'what breaks if a specific line, guard or condition is removed, reordered, inverted or moved off by one',
+      'failure paths in the new code: a throw or rejection halfway through, the state it leaves behind, a retry, a timeout',
+      'state across calls: the same call twice, two calls interleaved, a shared or module-level value, a mutated argument',
+      'existing callers the diff did not touch: what they now get differently (a value, a type, an error, a delay)',
+      'what the tests or checks prove, and which plausible bug in the new code they would still let through',
+      'a decision Claude made, asked as what it makes a concrete call return or do, never as whether it was the right design',
     ],
+    hunt: 'Before writing, review the diff as a reviewer hunting for bugs. Go through every added and changed line and try the edges on it: empty, missing (null, undefined, absent key), zero, negative, a duplicate, exactly at a limit and one past it, a throw or rejection halfway, the same call twice, and each existing caller of a changed function. Note every input that gives a wrong, surprising or unhandled result.',
   },
   architecture: {
     name: 'Architecture',
@@ -60,8 +67,10 @@ export const LENSES: Record<Exclude<Perspective, 'mixed'>, Lens> = {
       'boundaries and coupling: what now depends on what, where state lives, who owns it',
       'blast radius: what else must change in step, and what could break far from the diff',
       'behavior under load, concurrency, ordering or partial failure, and how reversible the change is',
+      'unwanted behavior over time or at scale: growth with no bound, duplicates after a retry, old and new versions running side by side, a restart',
       'what the tests cannot show about the running system: other instances, real load, callers they skip',
     ],
+    hunt: 'Before writing, look for unwanted behavior the change brings to the system, beyond what the diff shows: other callers and the data they pass, several instances or processes at once, a retry or a duplicate message, a partial failure between two steps, a deploy where old and new code run together, and growth over days of traffic. Note every case where the system would end up wrong, inconsistent or degraded.',
   },
   product: {
     name: 'Product',
@@ -78,15 +87,25 @@ export const LENSES: Record<Exclude<Perspective, 'mixed'>, Lens> = {
 
 const angleList = (lens: Lens) => lens.angles.map(angle => `\n   - ${angle}`).join('')
 
+// What to do with what the hunt found. The question puts the finding to the
+// user without naming it, so they have to find it themselves.
+export const HUNT_USE = `Build at least one question on the most serious finding: give the concrete input or situation and ask what happens, or ask which input or situation breaks it. Do not say in the question that it is a bug; the user should spot it. If you find nothing wrong, ask about the case that comes closest to breaking. A finding that is a real bug goes in that question's explanation on the scorecard, and in your one line after it, with an offer to fix it.`
+
+const huntRule = (lenses: readonly Lens[]): string => {
+  const hunts = lenses.flatMap(lens => (lens.hunt === undefined ? [] : [lens.hunt]))
+  return hunts.length === 0 ? '' : `\n   ${hunts.join(' ')} ${HUNT_USE}`
+}
+
 const perspectiveRule = (perspective: Perspective): string => {
   if (perspective === 'mixed') {
-    const lenses = Object.values(LENSES)
+    const all = Object.values(LENSES)
+    const lenses = all
       .map(lens => `\n   ${lens.name} (${lens.focus}):${angleList(lens).replaceAll('\n   -', '\n     -')}`)
       .join('')
-    return `Perspective: mixed. Pick the angles this change actually carries; with 2 or more questions, use at least two lenses.${lenses}`
+    return `Perspective: mixed. Pick the angles this change actually carries; with 2 or more questions, use at least two lenses.${lenses}${huntRule(all)}`
   }
   const lens = LENSES[perspective]
-  return `Perspective: ${lens.name}. The user chose to be quizzed on ${lens.focus}, so EVERY question takes this angle, including the riskiest-part, decision and test questions below. ${lens.elsewhere[0]?.toUpperCase()}${lens.elsewhere.slice(1)} belong to other perspectives: leave them out unless you can ask them as a ${lens.name.toLowerCase()} question. If the change barely touches this angle, ask how it could still reach it rather than switching angle. Good angles:${angleList(lens)}`
+  return `Perspective: ${lens.name}. The user chose to be quizzed on ${lens.focus}, so EVERY question takes this angle, including the riskiest-part, decision and test questions below. ${lens.elsewhere[0]?.toUpperCase()}${lens.elsewhere.slice(1)} belong to other perspectives: leave them out unless you can ask them as a ${lens.name.toLowerCase()} question. If the change barely touches this angle, ask how it could still reach it rather than switching angle. Good angles:${angleList(lens)}${huntRule([lens])}`
 }
 
 // How the quiz reads: the angle its questions take and how they are worded.
@@ -125,7 +144,7 @@ export const quizInstructions = (count: QuestionCount, style: QuizStyle, options
     perspectiveRule(style.perspective),
     ...wordingRules(style.wording),
     `Every question must:
-   - be about THIS change: name the file, function or behavior it is about. If someone could answer it without having seen the change, rewrite it,
+   - be about THIS change: name the file, function or behavior it is about, and turn on what the change added or altered, not on code it left as it was. If someone could answer it without having seen the change, rewrite it,
    - test reasoning (why, what if, what breaks, what it proves), not trivia such as names, syntax, line counts or API spellings,
    - hold one idea and stand alone: the dialog shows only the question and its options.
    Across the quiz, always through the chosen perspective:

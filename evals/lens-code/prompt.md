@@ -57,12 +57,17 @@ Do this now:
 1. Call AskUserQuestion ONCE with 1 to 4 questions. Weigh how severe and complex the change is: a small, low-risk change gets few; a large, risky or intricate one gets more, never more than 4. Pass metadata: {"source": "comprehension-check"}. The mod first asks the user whether they want the quiz, then shows answering instructions above your questions.
 2. The goal is the user's critical thinking, not their memory. Code an agent wrote is easy to accept without reading it; the quiz checks that the user still owns this change: they can explain what it does, defend it to whoever will maintain it, and say what it does not cover. Ask what a sharp reviewer would ask before approving it.
 3. Perspective: Code. The user chose to be quizzed on how the change behaves, line by line, so EVERY question takes this angle, including the riskiest-part, decision and test questions below. System design, deployment and user impact belong to other perspectives: leave them out unless you can ask them as a code question. If the change barely touches this angle, ask how it could still reach it rather than switching angle. Good angles:
-   - the result for a concrete input or edge case that runs through the changed code
-   - what breaks if a specific line, guard or condition is removed, reordered or inverted
-   - failure paths: an error, an empty or missing value, a retry, a timeout
-   - what the tests or checks prove, and which broken case they would still let through
+   - predict: the exact result of an added or changed line for a concrete input at its edge (empty, missing, zero, negative, a duplicate, exactly at a limit, one past it)
+   - find the input: which of several concrete inputs make the new code misbehave (a checkbox question fits), or the smallest input that does
+   - what breaks if a specific line, guard or condition is removed, reordered, inverted or moved off by one
+   - failure paths in the new code: a throw or rejection halfway through, the state it leaves behind, a retry, a timeout
+   - state across calls: the same call twice, two calls interleaved, a shared or module-level value, a mutated argument
+   - existing callers the diff did not touch: what they now get differently (a value, a type, an error, a delay)
+   - what the tests or checks prove, and which plausible bug in the new code they would still let through
+   - a decision Claude made, asked as what it makes a concrete call return or do, never as whether it was the right design
+   Before writing, review the diff as a reviewer hunting for bugs. Go through every added and changed line and try the edges on it: empty, missing (null, undefined, absent key), zero, negative, a duplicate, exactly at a limit and one past it, a throw or rejection halfway, the same call twice, and each existing caller of a changed function. Note every input that gives a wrong, surprising or unhandled result. Build at least one question on the most serious finding: give the concrete input or situation and ask what happens, or ask which input or situation breaks it. Do not say in the question that it is a bug; the user should spot it. If you find nothing wrong, ask about the case that comes closest to breaking. A finding that is a real bug goes in that question's explanation on the scorecard, and in your one line after it, with an offer to fix it.
 4. Every question must:
-   - be about THIS change: name the file, function or behavior it is about. If someone could answer it without having seen the change, rewrite it,
+   - be about THIS change: name the file, function or behavior it is about, and turn on what the change added or altered, not on code it left as it was. If someone could answer it without having seen the change, rewrite it,
    - test reasoning (why, what if, what breaks, what it proves), not trivia such as names, syntax, line counts or API spellings,
    - hold one idea and stand alone: the dialog shows only the question and its options.
    Across the quiz, always through the chosen perspective:

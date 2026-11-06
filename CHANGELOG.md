@@ -6,6 +6,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Changed
+
+- **Sharper Code and Architecture questions.** Before writing the quiz, Claude reviews the diff like a reviewer hunting for bugs: the edges of every added line (empty, missing, zero, at a limit and one past it, a throw halfway, the same call twice, existing callers) and, for the system, several instances, retries, partial failure, mixed versions during a deploy and growth over time. At least one question is built on the worst finding, without naming it, so you have to spot it; a real bug is called out on the scorecard with an offer to fix it. New Code angles: find the input that breaks it, state across calls, existing callers that now behave differently, and a decision asked as what a call now returns rather than whether it was the right design. Every question now turns on what the change added or altered.
+- **Evals**: a `corner-case` grader for `lens-code` and `lens-architecture`.
+
 ## [0.8.0] - 2026-11-05
 
 ### Added

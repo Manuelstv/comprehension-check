@@ -62,7 +62,7 @@ Do this now:
    - what was left out, and whether it is safe to ship without it
    - how they would know it works for users, beyond a green test: what to try, measure or tell them
 4. Every question must:
-   - be about THIS change: name the file, function or behavior it is about. If someone could answer it without having seen the change, rewrite it,
+   - be about THIS change: name the file, function or behavior it is about, and turn on what the change added or altered, not on code it left as it was. If someone could answer it without having seen the change, rewrite it,
    - test reasoning (why, what if, what breaks, what it proves), not trivia such as names, syntax, line counts or API spellings,
    - hold one idea and stand alone: the dialog shows only the question and its options.
    Across the quiz, always through the chosen perspective:

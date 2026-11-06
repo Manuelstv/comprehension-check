@@ -61,9 +61,11 @@ Do this now:
    - boundaries and coupling: what now depends on what, where state lives, who owns it
    - blast radius: what else must change in step, and what could break far from the diff
    - behavior under load, concurrency, ordering or partial failure, and how reversible the change is
+   - unwanted behavior over time or at scale: growth with no bound, duplicates after a retry, old and new versions running side by side, a restart
    - what the tests cannot show about the running system: other instances, real load, callers they skip
+   Before writing, look for unwanted behavior the change brings to the system, beyond what the diff shows: other callers and the data they pass, several instances or processes at once, a retry or a duplicate message, a partial failure between two steps, a deploy where old and new code run together, and growth over days of traffic. Note every case where the system would end up wrong, inconsistent or degraded. Build at least one question on the most serious finding: give the concrete input or situation and ask what happens, or ask which input or situation breaks it. Do not say in the question that it is a bug; the user should spot it. If you find nothing wrong, ask about the case that comes closest to breaking. A finding that is a real bug goes in that question's explanation on the scorecard, and in your one line after it, with an offer to fix it.
 4. Every question must:
-   - be about THIS change: name the file, function or behavior it is about. If someone could answer it without having seen the change, rewrite it,
+   - be about THIS change: name the file, function or behavior it is about, and turn on what the change added or altered, not on code it left as it was. If someone could answer it without having seen the change, rewrite it,
    - test reasoning (why, what if, what breaks, what it proves), not trivia such as names, syntax, line counts or API spellings,
    - hold one idea and stand alone: the dialog shows only the question and its options.
    Across the quiz, always through the chosen perspective:

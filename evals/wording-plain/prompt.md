@@ -79,21 +79,27 @@ Do this now:
 2. The goal is the user's critical thinking, not their memory. Code an agent wrote is easy to accept without reading it; the quiz checks that the user still owns this change: they can explain what it does, defend it to whoever will maintain it, and say what it does not cover. Ask what a sharp reviewer would ask before approving it.
 3. Perspective: mixed. Pick the angles this change actually carries; with 2 or more questions, use at least two lenses.
    Code (how the change behaves, line by line):
-     - the result for a concrete input or edge case that runs through the changed code
-     - what breaks if a specific line, guard or condition is removed, reordered or inverted
-     - failure paths: an error, an empty or missing value, a retry, a timeout
-     - what the tests or checks prove, and which broken case they would still let through
+     - predict: the exact result of an added or changed line for a concrete input at its edge (empty, missing, zero, negative, a duplicate, exactly at a limit, one past it)
+     - find the input: which of several concrete inputs make the new code misbehave (a checkbox question fits), or the smallest input that does
+     - what breaks if a specific line, guard or condition is removed, reordered, inverted or moved off by one
+     - failure paths in the new code: a throw or rejection halfway through, the state it leaves behind, a retry, a timeout
+     - state across calls: the same call twice, two calls interleaved, a shared or module-level value, a mutated argument
+     - existing callers the diff did not touch: what they now get differently (a value, a type, an error, a delay)
+     - what the tests or checks prove, and which plausible bug in the new code they would still let through
+     - a decision Claude made, asked as what it makes a concrete call return or do, never as whether it was the right design
    Architecture (how the change fits the system):
      - why this design over a named alternative, and what it trades away
      - boundaries and coupling: what now depends on what, where state lives, who owns it
      - blast radius: what else must change in step, and what could break far from the diff
      - behavior under load, concurrency, ordering or partial failure, and how reversible the change is
+     - unwanted behavior over time or at scale: growth with no bound, duplicates after a retry, old and new versions running side by side, a restart
      - what the tests cannot show about the running system: other instances, real load, callers they skip
    Product (what the change means for the people who use it):
      - what a user now sees or does differently, and which users it affects
      - defaults, scope cuts and requirements Claude chose or reinterpreted on the user's behalf
      - what was left out, and whether it is safe to ship without it
      - how they would know it works for users, beyond a green test: what to try, measure or tell them
+   Before writing, review the diff as a reviewer hunting for bugs. Go through every added and changed line and try the edges on it: empty, missing (null, undefined, absent key), zero, negative, a duplicate, exactly at a limit and one past it, a throw or rejection halfway, the same call twice, and each existing caller of a changed function. Note every input that gives a wrong, surprising or unhandled result. Before writing, look for unwanted behavior the change brings to the system, beyond what the diff shows: other callers and the data they pass, several instances or processes at once, a retry or a duplicate message, a partial failure between two steps, a deploy where old and new code run together, and growth over days of traffic. Note every case where the system would end up wrong, inconsistent or degraded. Build at least one question on the most serious finding: give the concrete input or situation and ask what happens, or ask which input or situation breaks it. Do not say in the question that it is a bug; the user should spot it. If you find nothing wrong, ask about the case that comes closest to breaking. A finding that is a real bug goes in that question's explanation on the scorecard, and in your one line after it, with an offer to fix it.
 4. Wording: plain. The user wants to spend their time thinking about the answer, not working out what the question means. Write every question, option and piece of feedback in plain, everyday words:
    - short sentences of about 15 words, one idea each. A question may set the scene in a few such sentences, then asks ONE thing; about 40 words in all. Not "what happens, and why?": the options carry the why,
    - say what each number is: "a price of 10 at 9:00", not "A1 at 10 at 9:00",
@@ -104,7 +110,7 @@ Do this now:
    - in the scorecard, the same plain words: a newcomer to this code reads each punchline, explanation and next_step in one pass.
    Plain words must not make the answer easier to guess: keep the reasoning just as hard and the options just as fair. Every other rule still applies.
 5. Every question must:
-   - be about THIS change: name the file, function or behavior it is about. If someone could answer it without having seen the change, rewrite it,
+   - be about THIS change: name the file, function or behavior it is about, and turn on what the change added or altered, not on code it left as it was. If someone could answer it without having seen the change, rewrite it,
    - test reasoning (why, what if, what breaks, what it proves), not trivia such as names, syntax, line counts or API spellings,
    - hold one idea and stand alone: the dialog shows only the question and its options.
    Across the quiz, always through the chosen perspective:

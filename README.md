@@ -127,9 +127,15 @@ You choose the **perspective** the questions take (see [Settings](#settings)):
 | Perspective | Asks about |
 | --- | --- |
 | **Mixed** (default) | Whichever of the three below the change actually carries, using at least two when there are 2 or more questions |
-| **Code** | How it behaves: the result for a concrete input, failure paths, what breaks if a guard goes, what the tests miss |
-| **Architecture** | How it fits: why this design over an alternative, coupling, where state lives, blast radius, behavior under load or partial failure |
+| **Code** | How it behaves: the result for a corner-case input in the new lines, which inputs make it misbehave, failure paths, state across calls, callers it changes, what the tests miss |
+| **Architecture** | How it fits: why this design over an alternative, coupling, where state lives, blast radius, behavior under load or partial failure, unwanted behavior over time or at scale |
 | **Product** | What it means for users: what they see differently, who is affected, defaults and scope chosen for them, how you would know it works |
+
+With **Code** or **Architecture** in play (Mixed included), Claude first reviews the diff the way a reviewer hunting for bugs would:
+it tries the edges on every added line (empty, missing, zero, exactly at a limit, a throw halfway, the same call twice, existing callers),
+and for the system, several instances, retries, partial failure, a deploy with old and new code side by side, growth over time.
+At least one question is built on the worst thing it finds, without saying it is a bug, so you find it yourself.
+If it is a real bug, the scorecard says so and Claude offers a fix.
 
 By default the quiz uses **plain wording**, so your time goes into the answer, not into working out the question:
 short one-idea sentences, one ask per question, numbers that say what they are ("a price of 10 at 9:00"), and any
